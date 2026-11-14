@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PIVOT Online — Profil</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <div class="topbar">
+    <a href="/" class="logo">PIVOT</a>
+    <nav>
+      <a href="/play">Jouer</a>
+      <a href="/tournaments">Tournois</a>
+      <a href="/shop">Boutique</a>
+      <a href="/leaderboard">Classement</a>
+      <a href="/" id="btn-home">← Accueil</a>
+    </nav>
+  </div>
+
+  <div class="card" id="profil-card">
+    <div class="profile">
+      <div class="avatar" id="avatar">?</div>
+      <div>
+        <div class="pseudo" id="pseudo">…</div>
+        <div class="stat-row" id="stat-row"></div>
+        <div class="stat-row mt-2">
+          <button class="btn btn-rouge btn-mini" id="btn-report">🚩 Signaler ce joueur</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="color:var(--bleu-fonce);">📊 Statistiques</h2>
+    <div class="grid grid-4" id="stats-grid"></div>
+  </div>
+
+  <div class="card">
+    <h2 style="color:var(--bleu-fonce);">🎮 Derniers matchs</h2>
+    <table class="leader-table" id="matchs-table">
+      <thead><tr><th>Type</th><th>Adversaire</th><th>Résultat</th><th>Elo</th><th>PC</th><th>TR</th><th>Date</th></tr></thead>
+      <tbody id="matchs-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/api.js"></script>
+<script>
+const m = window.location.pathname.match(/\/profile\/(.+)$/);
+const pseudo = m ? decodeURIComponent(m[1]) : '';
+
+charger();
+
+async function charger() {
+  if (!pseudo) { PIVOT.toast('Pseudo manquant.', 'error'); return; }
+  // Cacher le bouton signeler si on visite son propre profil
+  const me = PIVOT.getUser();
+  if (me && me.pseudo === pseudo) {
+    document.getElementById('btn-report')?.style.setProperty('display', 'none');
+  }
+  try {
+    const r = await PIVOT.api('GET', '/leaderboard/user/' + encodeURIComponent(pseudo));
+    const u = r.user;
+    document.getElementById('avatar').textContent = u.pseudo.charAt(0).toUpperCase();
+    document.getElementById('pseudo').textContent = u.pseudo;
+    const rank = guessRank(u.trophies);
+    document.getElementById('stat-row').innerHTML = `
+      <span class="pill"><span class="icon">🏆</span>${rank}</span>
+      <span class="pill"><span class="icon">⭐</span>${u.trophies} TR</span>
+      <span class="pill"><span class="icon">🎯</span>${u.elo} Elo</span>
+      <span class="pill"><span class="icon">🪙</span>${u.pc_balance} PC</span>
+      <span class="pill"><span class="icon">🔥</span>Streak ${u.win_streak} (best ${u.best_streak})</span>
+    `;
+    const win = u.matches_played ? Math.round(100 * u.matches_won / u.matches_played) : 0;
+    document.getElementById('stats-grid').innerHTML = `
+      <div><strong>${u.matches_played}</strong><br><span class="muted">Parties jouées</span></div>
+      <div><strong>${u.matches_won}</strong><br><span class="muted">Victoires</span></div>
+      <div><strong>${u.matches_lost}</strong><br><span class="muted">Défaites</span></div>
+      <div><strong>${win}%</strong><br><span class="muted">Win rate</span></div>
+    `;
+    // Derniers matchs
+    const tbody = document.getElementById('matchs-tbody');
+    if (!r.derniersMatchs || r.derniersMatchs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="muted">Aucun match terminé.</td></tr>';
+    } else {
+      tbody.innerHTML = r.derniersMatchs.map(mm => {
+        const isP1 = mm.p1 === u.pseudo;
+        const adv = isP1 ? mm.p2 : mm.p1;
+        const isWin = mm.winner_id === u.id;
+        const result = mm.status !== 'finished' ? 'En cours' : (isWin ? '✅ Victoire' : '❌ Défaite');
+        const date = mm.finished_at ? new Date(mm.finished_at).toLocaleString('fr-FR') : '—';
+        return `<tr>
+          <td>${mm.match_type}</td>
+          <td>${escapeHtml(adv || '—')}</td>
+          <td>${result}</td>
+          <td>${mm.elo_change >= 0 ? '+' : ''}${mm.elo_change || 0}</td>
+          <td>${mm.pc_earned || 0}</td>
+          <td>${mm.tr_earned || 0}</td>
+          <td>${date}</td>
+        </tr>`;
+      }).join('');
+    }
+  } catch (e) { PIVOT.toast(e.message, 'error'); }
+}
+
+function guessRank(tr) {
+  const R = [[0,'Plastique 1'],[50,'Plastique 2'],[100,'Plastique 3'],[150,'Bronze 1'],[250,'Bronze 2'],[350,'Bronze 3'],
+    [500,'Argent 1'],[650,'Argent 2'],[800,'Argent 3'],[1000,'Fer 1'],[1200,'Fer 2'],[1400,'Fer 3'],
+    [1700,'Or 1'],[2000,'Or 2'],[2300,'Or 3'],[2700,'Legendary 1'],[3100,'Legendary 2'],[3500,'Legendary 3']];
+  let s = R[0][1]; for (const [t, n] of R) if (tr >= t) s = n; return s;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+}
+
+// Bouton Signaler
+document.getElementById('btn-report').addEventListener('click', async () => {
+  if (!PIVOT.isLoggedIn()) { PIVOT.toast('Connecte-toi pour signaler.', 'error'); return; }
+  if (!confirm(`Signaler ${pseudo} ?`)) return;
+  const reason = prompt(`Raison du signalement :
+- triche
+- comportement_toxique
+- pseudo_inapproprie
+- spam
+- autre
+
+Tape la raison:`, 'comportement_toxique');
+  if (!reason) return;
+  const details = prompt('Détails (optionnel):', '') || '';
+  try {
+    // Récupérer l'id du joueur
+    const r = await PIVOT.api('GET', '/leaderboard/user/' + encodeURIComponent(pseudo));
+    if (!r.user || !r.user.id) { PIVOT.toast('Joueur introuvable.', 'error'); return; }
+    await PIVOT.api('POST', '/reports', { reportedId: r.user.id, reason, details });
+    PIVOT.toast('Signalement envoyé aux admins.');
+  } catch (e) { PIVOT.toast(e.message, 'error'); }
+});
+</script>
+</body>
+</html>

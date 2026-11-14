@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PIVOT Online — Admin</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <div class="topbar">
+    <a href="/" class="logo">PIVOT</a>
+    <nav>
+      <a href="/play">Jouer</a>
+      <a href="/tournaments">Tournois</a>
+      <a href="/shop">Boutique</a>
+      <a href="/leaderboard">Classement</a>
+      <a href="/admin" style="color:var(--jaune);">Admin</a>
+      <a href="/">← Accueil</a>
+    </nav>
+  </div>
+
+  <div class="card">
+    <h2 style="color:var(--bleu-fonce);">⚙️ Page Admin</h2>
+    <p class="muted mb-2">Gestion des comptes, des signalements, distribution d'objets.</p>
+    <div id="admin-access" class="hidden">
+      <p class="muted">Vérification des droits…</p>
+    </div>
+  </div>
+
+  <div id="admin-content" class="hidden">
+    <!-- Stats globales -->
+    <div class="card">
+      <h3 style="color:var(--bleu-fonce);">📊 Statistiques globales</h3>
+      <div class="stats-grid" id="stats-grid">Chargement…</div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="admin-tabs">
+      <div class="admin-tab active" data-tab="users">👥 Utilisateurs</div>
+      <div class="admin-tab" data-tab="reports">🚩 Signalements</div>
+      <div class="admin-tab" data-tab="logs">📜 Logs admin</div>
+    </div>
+
+    <!-- Tab users -->
+    <div id="tab-users" class="card">
+      <div class="row mb-2">
+        <input type="text" id="search-user" placeholder="Rechercher un pseudo…" style="flex:1;padding:8px;border:2px solid #1B2430;border-radius:8px;">
+        <button class="btn btn-mini" id="btn-search">Rechercher</button>
+      </div>
+      <div id="users-list" class="col"></div>
+      <div class="row mt-2">
+        <button class="btn btn-mini" id="btn-prev-users">←</button>
+        <span id="users-page" class="muted flex-grow" style="text-align:center;">Page 1</span>
+        <button class="btn btn-mini" id="btn-next-users">→</button>
+      </div>
+    </div>
+
+    <!-- Tab reports -->
+    <div id="tab-reports" class="card hidden">
+      <div class="row mb-2">
+        <select id="report-filter" style="padding:6px;border:2px solid #1B2430;border-radius:8px;">
+          <option value="open">⚠️ Ouverts</option>
+          <option value="resolved">✅ Résolus</option>
+          <option value="dismissed">❌ Écartés</option>
+        </select>
+        <button class="btn btn-mini" id="btn-load-reports">Charger</button>
+      </div>
+      <div id="reports-list" class="col"></div>
+    </div>
+
+    <!-- Tab logs -->
+    <div id="tab-logs" class="card hidden">
+      <div id="logs-list" class="col"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de don d'objets -->
+<div id="give-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <h3>Donner des objets à <span id="give-user-name"></span></h3>
+    <div class="form-group">
+      <label>PC</label><input type="number" id="give-pc" value="0" min="0" max="100000">
+    </div>
+    <div class="form-group">
+      <label>Téléportation</label><input type="number" id="give-tp" value="0" min="0" max="1000">
+    </div>
+    <div class="form-group">
+      <label>Diagonale</label><input type="number" id="give-diagonale" value="0" min="0" max="1000">
+    </div>
+    <div class="form-group">
+      <label>Virage (Pivot)</label><input type="number" id="give-pivot" value="0" min="0" max="1000">
+    </div>
+    <div class="form-group">
+      <label>Coffre (niveau 1-5, 0 = aucun)</label><input type="number" id="give-coffre" value="0" min="0" max="5">
+    </div>
+    <div class="row">
+      <button class="btn btn-vert" id="btn-confirm-give">Valider le don</button>
+      <button class="btn btn-rouge" id="btn-cancel-give">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/api.js"></script>
+<script>
+let usersPage = 1;
+let usersPages = 1;
+let giveUserId = null;
+
+// Vérifier l'accès admin
+(async function checkAdmin() {
+  if (PIVOT.redirectIfLoggedOut()) return;
+  try {
+    const r = await PIVOT.fetchMe();
+    if (!r.user.is_admin) {
+      document.getElementById('admin-access').classList.remove('hidden');
+      document.getElementById('admin-access').innerHTML = '<p style="color:var(--rouge);font-weight:800;">⛔ Accès refusé : tu n\'es pas admin.</p>';
+      return;
+    }
+    document.getElementById('admin-content').classList.remove('hidden');
+    chargerStats();
+    chargerUsers();
+  } catch (e) {
+    if (e.message.includes('banni')) {
+      PIVOT.toast(e.message, 'error');
+      setTimeout(() => window.location.href = '/login', 1500);
+    } else {
+      PIVOT.toast(e.message, 'error');
+    }
+  }
+})();
+
+// Tabs
+document.querySelectorAll('.admin-tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.admin-tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.querySelectorAll('[id^="tab-"]').forEach(x => x.classList.add('hidden'));
+    const tab = t.dataset.tab;
+    document.getElementById('tab-' + tab).classList.remove('hidden');
+    if (tab === 'reports') chargerReports();
+    if (tab === 'logs') chargerLogs();
+  });
+});
+
+async function chargerStats() {
+  try {
+    const s = await PIVOT.api('GET', '/admin/stats');
+    document.getElementById('stats-grid').innerHTML = `
+      <div class="stat-box"><div class="value">${s.users}</div><div class="label">Joueurs</div></div>
+      <div class="stat-box"><div class="value">${s.banned}</div><div class="label">Bannis</div></div>
+      <div class="stat-box"><div class="value">${s.admins}</div><div class="label">Admins</div></div>
+      <div class="stat-box"><div class="value">${s.matches}</div><div class="label">Matchs</div></div>
+      <div class="stat-box"><div class="value">${s.openReports}</div><div class="label">Signalements ouverts</div></div>
+      <div class="stat-box"><div class="value">${s.pcTotal}</div><div class="label">PC en circulation</div></div>
+    `;
+  } catch (e) { PIVOT.toast(e.message, 'error'); }
+}
+
+async function chargerUsers() {
+  const search = document.getElementById('search-user').value.trim();
+  try {
+    const r = await PIVOT.api('GET', `/admin/users?page=${usersPage}${search ? '&search=' + encodeURIComponent(search) : ''}`);
+    usersPages = r.pages || 1;
+    document.getElementById('users-page').textContent = `Page ${r.page} / ${usersPages} (${r.total} joueurs)`;
+    const list = document.getElementById('users-list');
+    if (!r.users || r.users.length === 0) {
+      list.innerHTML = '<p class="muted">Aucun joueur.</p>';
+      return;
+    }
+    list.innerHTML = r.users.map(u => `
+      <div class="user-row ${u.banned ? 'banned' : ''} ${u.is_admin ? 'admin' : ''}" data-user-id="${u.id}">
+        <div>#${u.id}</div>
+        <div class="pseudo">${escapeHtml(u.pseudo)} ${u.is_admin ? '⭐' : ''} ${u.banned ? '🚫' : ''}</div>
+        <div title="Elo">🎯 ${u.elo}</div>
+        <div title="TR">🏆 ${u.trophies}</div>
+        <div title="PC">🪙 ${u.pc_balance}</div>
+        <div class="user-actions">
+          ${u.banned
+            ? `<button class="btn btn-mini btn-vert" data-action="unban">Débannir</button>`
+            : `<button class="btn btn-mini btn-rouge" data-action="ban">Bannir</button>`}
+          <button class="btn btn-mini" data-action="give">🎁 Donner</button>
+          ${u.is_admin
+            ? `<button class="btn btn-mini btn-rouge" data-action="unset-admin">Retirer admin</button>`
+            : `<button class="btn btn-mini btn-bleu" data-action="set-admin">Promouvoir admin</button>`}
+          <button class="btn btn-mini" data-action="reset">Reset stats</button>
+          <button class="btn btn-mini btn-rouge" data-action="delete">Supprimer</button>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) { PIVOT.toast(e.message, 'error'); }
+}
+
+document.getElementById('btn-search').addEventListener('click', () => { usersPage = 1; chargerUsers(); });
+document.getElementById('btn-prev-users').addEventListener('click', () => { if (usersPage > 1) { usersPage--; chargerUsers(); } });
+document.getElementById('btn-next-users').addEventListener('click', () => { if (usersPage < usersPages) { usersPage++; chargerUsers(); } });
+
+document.getElementById('users-list').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const row = btn.closest('[data-user-id]');
+  const userId = parseInt(row.dataset.userId, 10);
+  const action = btn.dataset.action;
+  const pseudo = row.querySelector('.pseudo').textContent.trim();
+
+  if (action === 'delete') {
+    if (!confirm(`Supprimer définitivement le compte de ${pseudo} ?`)) return;
+    try { await PIVOT.api('POST', `/admin/users/${userId}/delete`, {}); PIVOT.toast('Compte supprimé.'); chargerUsers(); chargerStats(); }
+    catch (err) { PIVOT.toast(err.message, 'error'); }
+  } else if (action === 'ban') {
+    const reason = prompt(`Raison du ban de ${pseudo} :`, 'Comportement toxique.');
+    if (reason === null) return;
+    try { await PIVOT.api('POST', `/admin/users/${userId}/ban`, { reason }); PIVOT.toast('Joueur banni.'); chargerUsers(); chargerStats(); }
+    catch (err) { PIVOT.toast(err.message, 'error'); }
+  } else if (action === 'unban') {
+    try { await PIVOT.api('POST', `/admin/users/${userId}/unban`, {}); PIVOT.toast('Joueur débanni.'); chargerUsers(); chargerStats(); }
+    catch (err) { PIVOT.toast(err.message, 'error'); }
+  } else if (action === 'set-admin') {
+    if (!confirm(`Promouvoir ${pseudo} admin ?`)) return;
+    try { await PIVOT.api('POST', `/admin/users/${userId}/set-admin`, { isAdmin: true }); PIVOT.toast('Admin défini.'); chargerUsers(); chargerStats(); }
+    catch (err) { PIVOT.toast(err.message, 'error'); }
+  } else if (action === 'unset-admin') {
+    if (!confirm(`Retirer le rôle admin à ${pseudo} ?`)) return;
+    try { await PIVOT.api('POST', `/admin/users/${userId}/set-admin`, { isAdmin: false }); PIVOT.toast('Admin retiré.'); chargerUsers(); chargerStats(); }
+    catch (err) { PIVOT.toast(err.message, 'error'); }
+  } else if (action === 'give') {
+    giveUserId = userId;
+    document.getElementById('give-user-name').textContent = pseudo;
+    document.getElementById('give-modal').classList.remove('hidden');
+  } else if (action === 'reset') {
+    if (!confirm(`Réinitialiser Elo/TR/streak de ${pseudo} ?`)) return;
+    try { await PIVOT.api('POST', `/admin/users/${userId}/reset-stats`, {}); PIVOT.toast('Stats réinitialisées.'); chargerUsers(); }
+    catch (err) { PIVOT.toast(err.message, 'error'); }
+  }
+});
+
+// Modal de don
+document.getElementById('btn-cancel-give').addEventListener('click', () => {
+  document.getElementById('give-modal').classList.add('hidden');
+});
+document.getElementById('btn-confirm-give').addEventListener('click', async () => {
+  const pc = parseInt(document.getElementById('give-pc').value, 10) || 0;
+  const tp = parseInt(document.getElementById('give-tp').value, 10) || 0;
+  const diagonale = parseInt(document.getElementById('give-diagonale').value, 10) || 0;
+  const pivot = parseInt(document.getElementById('give-pivot').value, 10) || 0;
+  const coffre = parseInt(document.getElementById('give-coffre').value, 10) || 0;
+  if (pc === 0 && tp === 0 && diagonale === 0 && pivot === 0 && coffre === 0) {
+    PIVOT.toast('Aucun objet à donner.', 'error'); return;
+  }
+  try {
+    const r = await PIVOT.api('POST', `/admin/users/${giveUserId}/give`, { pc, tp, diagonale, pivot, coffre });
+    PIVOT.toast('Don effectué : ' + r.recap);
+    document.getElementById('give-modal').classList.add('hidden');
+    chargerUsers();
+  } catch (err) { PIVOT.toast(err.message, 'error'); }
+});
+
+async function chargerReports() {
+  const status = document.getElementById('report-filter').value;
+  try {
+    const r = await PIVOT.api('GET', `/admin/reports?status=${status}`);
+    const list = document.getElementById('reports-list');
+    if (!r.reports || r.reports.length === 0) {
+      list.innerHTML = '<p class="muted">Aucun signalement.</p>';
+      return;
+    }
+    list.innerHTML = r.reports.map(rep => `
+      <div class="report-row" data-report-id="${rep.id}">
+        <div class="report-header">
+          <span>
+            <span class="report-reason">${escapeHtml(rep.reason)}</span>
+            ${escapeHtml(rep.reporter_pseudo || '?')} → ${escapeHtml(rep.reported_pseudo || '?')}
+            ${rep.reported_banned ? '🚫' : ''}
+          </span>
+          <span class="muted">${new Date(rep.created_at).toLocaleString('fr-FR')}</span>
+        </div>
+        ${rep.details ? `<div class="muted" style="margin:6px 0;">${escapeHtml(rep.details)}</div>` : ''}
+        ${rep.admin_note ? `<div class="muted" style="margin:6px 0;font-style:italic;">Note: ${escapeHtml(rep.admin_note)}</div>` : ''}
+        ${rep.status === 'open' ? `
+          <div class="user-actions" style="margin-top:6px;">
+            <button class="btn btn-mini btn-vert" data-report-action="resolve" data-report-id="${rep.id}">Résoudre</button>
+            <button class="btn btn-mini btn-rouge" data-report-action="dismiss" data-report-id="${rep.id}">Écarter</button>
+            <button class="btn btn-mini" data-report-ban-user="${rep.reported_id}" data-report-ban-pseudo="${escapeHtml(rep.reported_pseudo || '')}">Bannir ce joueur</button>
+          </div>` : ''}
+      </div>
+    `).join('');
+  } catch (e) { PIVOT.toast(e.message, 'error'); }
+}
+
+document.getElementById('btn-load-reports').addEventListener('click', chargerReports);
+document.getElementById('report-filter').addEventListener('change', chargerReports);
+
+document.getElementById('reports-list').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-report-action]');
+  if (!btn) return;
+  const id = btn.dataset.reportId;
+  const action = btn.dataset.reportAction;
+  if (action === 'resolve' || action === 'dismiss') {
+    const note = prompt('Note admin (optionnel) :', '') || '';
+    try {
+      await PIVOT.api('POST', `/admin/reports/${id}/resolve`, { note, dismiss: action === 'dismiss' });
+      PIVOT.toast(action === 'dismiss' ? 'Signalement écarté.' : 'Signalement résolu.');
+      chargerReports();
+      chargerStats();
+    } catch (err) { PIVOT.toast(err.message, 'error'); }
+  }
+});
+
+// Bouton "Bannir ce joueur" depuis un signalement
+document.getElementById('reports-list').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-report-ban-user]');
+  if (!btn) return;
+  const userId = parseInt(btn.dataset.reportBanUser, 10);
+  const pseudo = btn.dataset.reportBanPseudo;
+  const reason = prompt(`Raison du ban de ${pseudo} :`, 'Signalement confirmé.');
+  if (reason === null) return;
+  try {
+    await PIVOT.api('POST', `/admin/users/${userId}/ban`, { reason });
+    PIVOT.toast('Joueur banni.');
+    chargerReports();
+    chargerStats();
+  } catch (err) { PIVOT.toast(err.message, 'error'); }
+});
+
+async function chargerLogs() {
+  try {
+    const r = await PIVOT.api('GET', '/admin/logs');
+    const list = document.getElementById('logs-list');
+    if (!r.logs || r.logs.length === 0) {
+      list.innerHTML = '<p class="muted">Aucun log.</p>';
+      return;
+    }
+    list.innerHTML = r.logs.map(l => `
+      <div class="report-row">
+        <div class="report-header">
+          <span><strong>${escapeHtml(l.action)}</strong> par ${escapeHtml(l.admin_pseudo || '?')}</span>
+          <span class="muted">${new Date(l.created_at).toLocaleString('fr-FR')}</span>
+        </div>
+        ${l.details ? `<div class="muted" style="margin-top:4px;">${escapeHtml(l.details)}</div>` : ''}
+      </div>
+    `).join('');
+  } catch (e) { PIVOT.toast(e.message, 'error'); }
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+}
+</script>
+</body>
+</html>

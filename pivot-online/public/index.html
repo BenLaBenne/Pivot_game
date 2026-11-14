@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PIVOT Online — Dashboard</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <div class="topbar">
+    <a href="/" class="logo">PIVOT</a>
+    <nav id="nav-links">
+      <a href="/play">Jouer</a>
+      <a href="/tournaments">Tournois</a>
+      <a href="/shop">Boutique</a>
+      <a href="/leaderboard">Classement</a>
+      <a href="/admin" id="nav-admin" style="display:none;color:var(--jaune);">Admin</a>
+      <a href="#" id="btn-logout">Déconnexion</a>
+    </nav>
+  </div>
+
+  <!-- Profil -->
+  <div class="card">
+    <div class="profile">
+      <div class="avatar" id="avatar">?</div>
+      <div>
+        <div class="pseudo" id="pseudo">…</div>
+        <div class="stat-row" id="stat-row">
+          <span class="pill"><span class="icon">🏆</span><span id="rank">…</span></span>
+          <span class="pill"><span class="icon">⭐</span><span id="tr">0</span> TR</span>
+          <span class="pill"><span class="icon">🎯</span><span id="elo">1000</span> Elo</span>
+          <span class="pill"><span class="icon">🪙</span><span id="pc">0</span> PC</span>
+          <span class="pill"><span class="icon">🔥</span>Streak <span id="streak">0</span></span>
+        </div>
+        <div class="stat-row">
+          <span class="pill"><span class="icon">⚡</span>TP: <span id="inv-tp">0</span></span>
+          <span class="pill"><span class="icon">↗️</span>Diagonale: <span id="inv-diag">0</span></span>
+          <span class="pill"><span class="icon">🔄</span>Virage: <span id="inv-pivot">0</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Actions principales -->
+  <div class="card">
+    <h2 style="color:var(--bleu-fonce);">Jouer</h2>
+    <div class="grid grid-3 mt-2">
+      <button class="btn btn-large" onclick="window.location.href='/play'">⚡ Matchmaking ranked</button>
+      <button class="btn btn-bleu btn-large" id="btn-create-room">🔑 Créer un salon privé</button>
+      <button class="btn btn-violet btn-large" id="btn-join-room">🚪 Rejoindre un salon</button>
+    </div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card">
+      <h2 style="color:var(--bleu-fonce);">🏆 Tournois</h2>
+      <p class="muted mb-2">Affronte plusieurs joueurs en bracket à élimination. Récompenses boostées.</p>
+      <button class="btn btn-large" onclick="window.location.href='/tournaments'">Voir les tournois</button>
+    </div>
+    <div class="card">
+      <h2 style="color:var(--bleu-fonce);">🪙 Boutique</h2>
+      <p class="muted mb-2">Achète des capacités à l'unité ou ouvre des coffres pour gagner plus.</p>
+      <button class="btn btn-vert btn-large" onclick="window.location.href='/shop'">Aller à la boutique</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="color:var(--bleu-fonce);">📊 Stats</h2>
+    <div class="grid grid-3">
+      <div><strong id="stat-played">0</strong><br><span class="muted">Parties jouées</span></div>
+      <div><strong id="stat-won">0</strong><br><span class="muted">Victoires</span></div>
+      <div><strong id="stat-rate">0%</strong><br><span class="muted">Win rate</span></div>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/api.js"></script>
+<script>
+async function loadMe() {
+  if (PIVOT.redirectIfLoggedOut()) return;
+  try {
+    const r = await PIVOT.fetchMe();
+    const u = r.user;
+    PIVOT.setUser(u);
+    renderProfile(u);
+  } catch (e) {
+    if (e.message.includes('Token')) {
+      PIVOT.clearToken();
+      window.location.href = '/login';
+    } else {
+      PIVOT.toast(e.message, 'error');
+    }
+  }
+}
+
+function renderProfile(u) {
+  document.getElementById('avatar').textContent = (u.pseudo || '?').charAt(0).toUpperCase();
+  document.getElementById('pseudo').textContent = u.pseudo;
+  document.getElementById('tr').textContent = u.trophies;
+  document.getElementById('elo').textContent = u.elo;
+  document.getElementById('pc').textContent = u.pc;
+  document.getElementById('streak').textContent = u.win_streak;
+  document.getElementById('inv-tp').textContent = (u.inventaire && u.inventaire.tp) || 0;
+  document.getElementById('inv-diag').textContent = (u.inventaire && u.inventaire.diagonale) || 0;
+  document.getElementById('inv-pivot').textContent = (u.inventaire && u.inventaire.pivot) || 0;
+  document.getElementById('stat-played').textContent = u.matches_played;
+  document.getElementById('stat-won').textContent = u.matches_won;
+  const rate = u.matches_played ? Math.round(100 * u.matches_won / u.matches_played) : 0;
+  document.getElementById('stat-rate').textContent = rate + '%';
+  // Afficher le lien admin si l'utilisateur est admin
+  const navAdmin = document.getElementById('nav-admin');
+  if (navAdmin) navAdmin.style.display = u.is_admin ? 'inline-block' : 'none';
+  // Rank
+  const rankEl = document.getElementById('rank');
+  fetch('/api/leaderboard/user/' + encodeURIComponent(u.pseudo))
+    .then(r => r.json())
+    .then(d => {
+      const tierName = guessRank(d.user.trophies);
+      rankEl.textContent = tierName;
+    })
+    .catch(() => rankEl.textContent = '—');
+}
+
+// Approximation locale du rang
+function guessRank(tr) {
+  const R = [
+    [0,'Plastique 1'],[50,'Plastique 2'],[100,'Plastique 3'],
+    [150,'Bronze 1'],[250,'Bronze 2'],[350,'Bronze 3'],
+    [500,'Argent 1'],[650,'Argent 2'],[800,'Argent 3'],
+    [1000,'Fer 1'],[1200,'Fer 2'],[1400,'Fer 3'],
+    [1700,'Or 1'],[2000,'Or 2'],[2300,'Or 3'],
+    [2700,'Legendary 1'],[3100,'Legendary 2'],[3500,'Legendary 3']
+  ];
+  let s = R[0][1];
+  for (const [t, n] of R) if (tr >= t) s = n;
+  return s;
+}
+
+// Boutons
+document.getElementById('btn-logout').addEventListener('click', (e) => {
+  e.preventDefault();
+  PIVOT.clearToken();
+  window.location.href = '/login';
+});
+
+document.getElementById('btn-create-room').addEventListener('click', async () => {
+  try {
+    const r = await PIVOT.api('POST', '/rooms/create', {});
+    PIVOT.toast('Salon créé : ' + r.code);
+    setTimeout(() => window.location.href = '/room/' + r.code, 700);
+  } catch (e) { PIVOT.toast(e.message, 'error'); }
+});
+
+document.getElementById('btn-join-room').addEventListener('click', () => {
+  const code = prompt('Code du salon (6 caractères) :');
+  if (!code) return;
+  window.location.href = '/room/' + code.toUpperCase();
+});
+
+loadMe();
+</script>
+</body>
+</html>

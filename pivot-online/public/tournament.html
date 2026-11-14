@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PIVOT Online — Tournoi</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <div class="topbar">
+    <a href="/" class="logo">PIVOT</a>
+    <nav>
+      <a href="/play">Jouer</a>
+      <a href="/tournaments">Tournois</a>
+      <a href="/shop">Boutique</a>
+      <a href="/leaderboard">Classement</a>
+      <a href="/tournaments">← Retour</a>
+    </nav>
+  </div>
+
+  <div class="card">
+    <h2 id="t-name" style="color:var(--bleu-fonce);">Tournoi…</h2>
+    <p class="muted" id="t-meta"></p>
+    <div class="row mt-2">
+      <button class="btn btn-vert" id="btn-join">Rejoindre</button>
+      <button class="btn btn-bleu" id="btn-start">Lancer le tournoi</button>
+    </div>
+    <p class="muted mt-2" id="t-code-info"></p>
+  </div>
+
+  <div class="card">
+    <h3 style="color:var(--bleu-fonce);">Inscrits</h3>
+    <div id="inscrits" class="col"></div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/api.js"></script>
+<script>
+const m = window.location.pathname.match(/\/tournament\/(\d+)/);
+const id = m ? parseInt(m[1], 10) : 0;
+
+if (PIVOT.redirectIfLoggedOut()) {} else {
+  charger();
+}
+
+async function charger() {
+  try {
+    const r = await PIVOT.api('GET', '/tournaments/' + id);
+    const t = r.tournoi;
+    document.getElementById('t-name').textContent = t.name;
+    document.getElementById('t-meta').textContent =
+      `Créé par #${t.creator_id} • Statut: ${t.status} • ${t.is_private ? 'Privé' : 'Public'} • Max ${t.max_players} joueurs.`;
+    const user = PIVOT.getUser();
+    if (t.is_private) {
+      document.getElementById('t-code-info').textContent = 'Tournoi privé — code requis pour rejoindre: ' + (t.code || '?');
+    }
+    const inscrits = r.inscrits;
+    document.getElementById('inscrits').innerHTML = inscrits.map(u => `
+      <div class="pill">
+        <span class="icon">🎮</span>
+        <a href="/profile/${encodeURIComponent(u.pseudo)}" style="color:inherit;text-decoration:none;">${escapeHtml(u.pseudo)}</a>
+        <span class="muted">Elo ${u.elo} • ${u.trophies} TR</span>
+      </div>
+    `).join('');
+    // Bouton "Lancer" visible uniquement si créateur
+    if (user && user.id == t.creator_id && t.status === 'waiting') {
+      document.getElementById('btn-start').classList.remove('hidden');
+    } else {
+      document.getElementById('btn-start').classList.add('hidden');
+    }
+  } catch (e) { PIVOT.toast(e.message, 'error'); }
+}
+
+document.getElementById('btn-join').addEventListener('click', async () => {
+  const t = await PIVOT.api('GET', '/tournaments/' + id).catch(() => null);
+  let body = { };
+  if (t && t.tournoi && t.tournoi.is_private) {
+    const code = prompt('Code du tournoi privé :');
+    if (!code) return;
+    body.code = code;
+  }
+  try {
+    await PIVOT.api('POST', `/tournaments/${id}/join`, body);
+    PIVOT.toast('Inscription OK !');
+    charger();
+  } catch (e) { PIVOT.toast(e.message, 'error'); }
+});
+
+document.getElementById('btn-start').addEventListener('click', async () => {
+  try {
+    await PIVOT.api('POST', `/tournaments/${id}/start`, {});
+    PIVOT.toast('Tournoi lancé !');
+    charger();
+  } catch (e) { PIVOT.toast(e.message, 'error'); }
+});
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+}
+</script>
+</body>
+</html>

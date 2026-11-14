@@ -19,8 +19,11 @@ const ENCRE = '#1B2430';
 let etat = null;       // état public reçu du serveur
 let role = null;       // 'R' ou 'B' — le camp du joueur local
 let mode = 'glisser';  // action sélectionnée
-let enTp = false;      // tp local en cours (en attente du 2e coup)
-let tpPending = null;  // { to } en attente d'envoi au serveur
+let inventaireMoi = null;       // inventaire DB au début de la partie (moi)
+let inventaireAdversaire = null; // inventaire DB au début de la partie (adversaire)
+let adversairePseudo = null;
+let adversaireElo = 0;
+let dernierEtatSonJoue = null; // pour ne pas jouer le son "move" au premier render
 
 // ==== Lobby / Matchmaking ====
 PIVOT.initLobby = function() {
@@ -34,12 +37,15 @@ PIVOT.initLobby = function() {
   if (!sock) { window.location.href = '/login'; return; }
 
   btn.addEventListener('click', () => {
+    PIVOT.sounds && PIVOT.sounds.play('click');
     sock.emit('queue.join');
     btn.classList.add('hidden');
     btnLeave.classList.remove('hidden');
     document.getElementById('queue-msg').textContent = 'Recherche d\'un adversaire…';
+    PIVOT.sounds && PIVOT.sounds.play('join');
   });
   btnLeave.addEventListener('click', () => {
+    PIVOT.sounds && PIVOT.sounds.play('click');
     sock.emit('queue.leave');
     btn.classList.remove('hidden');
     btnLeave.classList.add('hidden');
@@ -59,15 +65,20 @@ PIVOT.initLobby = function() {
   sock.on('match.start', (data) => {
     role = data.role;
     etat = data.etat;
-    enTp = false; tpPending = null;
+    inventaireMoi = data.inventaireMoi || null;
+    inventaireAdversaire = data.inventaireAdversaire || null;
+    adversairePseudo = data.adversaire && data.adversaire.pseudo;
+    adversaireElo = data.adversaire && data.adversaire.elo;
+    mode = 'glisser'; // Toujours commencer en mode Glisser
     lobby.classList.add('hidden');
     game.classList.remove('hidden');
     document.getElementById('statut').textContent =
-      'Partie contre ' + data.adversaire.pseudo + ' (' + data.adversaire.elo + ' Elo). Tu joues ' +
+      'Partie contre ' + adversairePseudo + ' (' + adversaireElo + ' Elo). Tu joues ' +
       (role === 'R' ? 'Rouge (horizontal)' : 'Bleu (vertical)') + '.';
     PIVOT.bindSocket(sock);
     PIVOT.bindPanel();
     PIVOT.render();
+    PIVOT.sounds && PIVOT.sounds.play('join');
   });
 };
 
@@ -87,34 +98,63 @@ PIVOT.initRoom = function(code) {
     if (status) status.textContent = 'Statut : ' + (data.status === 'waiting' ? 'en attente d\'un adversaire' : 'en cours');
     if (data.code) {
       const link = document.getElementById('room-link');
-      if (link) link.textContent = window.location.origin + '/room/' + data.code;
+      if (link) {
+        link.textContent = window.location.origin + '/room/' + data.code;
+        link.href = '/room/' + data.code;
+      }
     }
   });
 
   sock.on('match.start', (data) => {
     role = data.role;
     etat = data.etat;
-    enTp = false; tpPending = null;
+    inventaireMoi = data.inventaireMoi || null;
+    inventaireAdversaire = data.inventaireAdversaire || null;
+    adversairePseudo = data.adversaire && data.adversaire.pseudo;
+    adversaireElo = data.adversaire && data.adversaire.elo;
+    mode = 'glisser';
     const lobby = document.getElementById('room-lobby');
     if (lobby) lobby.classList.add('hidden');
     const game = document.getElementById('game');
     if (game) game.classList.remove('hidden');
     PIVOT.bindPanel();
     PIVOT.render();
+    PIVOT.sounds && PIVOT.sounds.play('join');
   });
 };
 
 // ==== Bind socket events ====
 PIVOT.bindSocket = function(sock) {
   sock.on('match.update', (data) => {
+    // Détection du son à jouer : si c'est mon tour qui vient de revenir, c'est que l'adversaire a joué
+    if (etat && data && !etat.gagnant) {
+      const ancienTour = etat.tour;
+      const ancienEnTp = etat.enTp;
+      const ancienCoups = etat.coups;
+      // Le coup vient d'être joué par l'adversaire si data.tour !== ancienTour (tour a changé)
+      // OU data.enTp === true après un tp de l'adversaire
+      if (data.coups > ancienCoups && data.tour !== ancienTour) {
+        PIVOT.sounds && PIVOT.sounds.play('move');
+      } else if (data.coups > ancienCoups) {
+        // Même joueur (tp en 2 étapes) — on joue un son tp
+        PIVOT.sounds && PIVOT.sounds.play('tp');
+      }
+    }
     etat = data;
+    // Revenir en mode Glisser après chaque coup
+    mode = 'glisser';
     PIVOT.render();
   });
   sock.on('match.end', (data) => {
     PIVOT.renderFin(data);
   });
   sock.on('match.error', (data) => {
+    PIVOT.sounds && PIVOT.sounds.play('error');
     PIVOT.toast(data.error, 'error');
+  });
+  sock.on('match.quit-notify', (data) => {
+    // L'adversaire a quitté: message + on va recevoir match.end ensuite
+    PIVOT.toast(data.message || 'L\'adversaire a quitté la partie.', 'error');
   });
 };
 
@@ -126,6 +166,7 @@ PIVOT.bindPanel = function() {
 
   document.querySelectorAll('#modes button').forEach((b) => {
     b.addEventListener('click', () => {
+      PIVOT.sounds && PIVOT.sounds.play('click');
       mode = b.dataset.mode;
       PIVOT.updateModeButtons();
       PIVOT.render();
@@ -134,8 +175,14 @@ PIVOT.bindPanel = function() {
 
   const btnGarder = document.getElementById('btn-garder');
   const btnEchanger = document.getElementById('btn-echanger');
-  if (btnGarder) btnGarder.addEventListener('click', () => PIVOT.envoyerEchange(true));
-  if (btnEchanger) btnEchanger.addEventListener('click', () => PIVOT.envoyerEchange(false));
+  if (btnGarder) btnGarder.addEventListener('click', () => {
+    PIVOT.sounds && PIVOT.sounds.play('click');
+    PIVOT.envoyerEchange(true);
+  });
+  if (btnEchanger) btnEchanger.addEventListener('click', () => {
+    PIVOT.sounds && PIVOT.sounds.play('click');
+    PIVOT.envoyerEchange(false);
+  });
 
   const plateau = document.getElementById('plateau');
   plateau.addEventListener('click', (ev) => {
@@ -209,9 +256,10 @@ PIVOT.renderStatut = function() {
     el.textContent = 'Téléportation effectuée — déplace maintenant le pivot (glisser/virage/diagonale).';
   } else {
     const c = etat.tour;
-    el.textContent = 'À ' + etat.noms[c] + ' de jouer. (' + NOM_COULEUR[c] + (c === 'R' ? ' : horizontal' : ' : vertical') + ')';
+    const qui = (c === role) ? 'À toi' : 'À l\'adversaire';
+    el.textContent = qui + ' de jouer. (' + NOM_COULEUR[c] + (c === 'R' ? ' : horizontal' : ' : vertical') + ')';
   }
-  // Afficher l'échange si besoin
+  // Afficher l'échange si besoin (seul Bleu choisit)
   const echange = document.getElementById('echange');
   if (echange) echange.classList.toggle('hidden', !etat.attenteEchange || role !== 'B');
 };
@@ -256,16 +304,17 @@ PIVOT.renderPlateau = function() {
 
   // Cibles cliquables : uniquement si c'est mon tour
   const monTour = (cote === role) && !etat.gagnant && !etat.attenteEchange;
-  if (monTour || etat.attenteEchange && role === 'B') {
+  if (monTour || (etat.attenteEchange && role === 'B')) {
     let cibles = [];
     if (etat.attenteEchange) {
       // pas de cibles, juste les boutons garder/échanger
     } else if (etat.enTp) {
-      // après tp: on doit déplacer
-      if (mode === 'glisser') cibles = destinations(axeDe(cote));
-      else if (mode === 'virage') cibles = destinations(axeDe(autre(cote)));
-      else if (mode === 'diagonale') cibles = destinationsDiagonale();
-      else cibles = [];  // pas de tp ni borne en mode tp-suite
+      // après tp: on doit déplacer (glisser par défaut)
+      let m = mode;
+      if (m === 'tp' || m === 'borne') m = 'glisser';
+      if (m === 'glisser') cibles = destinations(axeDe(cote));
+      else if (m === 'virage') cibles = destinations(axeDe(autre(cote)));
+      else if (m === 'diagonale') cibles = destinationsDiagonale();
     } else {
       if (mode === 'glisser') cibles = destinations(axeDe(cote));
       else if (mode === 'virage') cibles = destinations(axeDe(autre(cote)));
@@ -289,21 +338,62 @@ PIVOT.renderPlateau = function() {
     `<svg viewBox="0 0 ${TAILLE} ${TAILLE}">${s}</svg>`;
 };
 
-PIVOT.renderPanneau = function() {
-  const cote = etat.tour;
-  for (const c of ['R', 'B']) {
-    const card = document.getElementById('card-' + c);
-    if (!card) continue;
-    card.classList.toggle('actif', cote === c && !etat.gagnant);
-    card.querySelector('.nom').textContent = etat.noms[c] + ' (' + NOM_COULEUR[c] + ')';
-    const s = etat.stock[c];
-    const stock = card.querySelector('.stock');
+// Affiche une carte d'inventaire (moi ou adversaire).
+// `cardEl` : élément DOM de la carte
+// `coteCamp` : 'R' ou 'B' (camp du joueur concerné)
+// `estMoi` : true si c'est mon inventaire
+PIVOT.renderCarteInventaire = function(cardEl, coteCamp, estMoi) {
+  if (!cardEl || !etat) return;
+  const s = etat.stock[coteCamp];
+  const actif = etat.tour === coteCamp && !etat.gagnant;
+  cardEl.classList.toggle('actif', actif);
+  // Couleur de pastille selon le camp
+  const pastille = cardEl.querySelector('.pastille');
+  if (pastille) pastille.style.background = COULEUR[coteCamp];
+  // Couleur de la bordure si actif
+  if (actif) {
+    cardEl.classList.add(coteCamp);
+    cardEl.style.borderColor = COULEUR[coteCamp];
+    cardEl.style.boxShadow = `0 4px 0 ${COULEUR[coteCamp]}`;
+  } else {
+    cardEl.classList.remove('R', 'B');
+    cardEl.style.borderColor = '';
+    cardEl.style.boxShadow = '';
+  }
+  // Nom + info camp
+  const nom = cardEl.querySelector('.nom');
+  if (nom) {
+    if (estMoi) {
+      nom.textContent = 'Moi (' + NOM_COULEUR[coteCamp] + ')';
+    } else {
+      nom.textContent = (adversairePseudo || 'Adversaire') + ' (' + NOM_COULEUR[coteCamp] + ')';
+    }
+  }
+  const campInfo = cardEl.querySelector('.camp-info');
+  if (campInfo) campInfo.textContent = coteCamp === 'R' ? '↔ horizontal' : '↕ vertical';
+
+  // Inventaire affiché : capacité restante dans la partie / capacité de départ (DB)
+  const invDebut = estMoi ? inventaireMoi : inventaireAdversaire;
+  const invDebutPivot = invDebut ? (invDebut.pivot || 0) : '?';
+  const invDebutTp = invDebut ? (invDebut.tp || 0) : '?';
+  const invDebutDiag = invDebut ? (invDebut.diagonale || 0) : '?';
+
+  const stock = cardEl.querySelector('.stock');
+  if (stock) {
     stock.innerHTML =
       `<span class="stock-item">❌ Bornes: <span class="pts">${'●'.repeat(s.bornes)}${'○'.repeat(3 - s.bornes)}</span></span>` +
-      `<span class="stock-item">🔄 Virage: ${s.virage}/2</span>` +
-      `<span class="stock-item">⚡ TP: ${s.tp}/1</span>` +
-      `<span class="stock-item">↗️ Diag: ${s.diagonale}/1</span>`;
+      `<span class="stock-item">🔄 Virage: ${s.virage}/${invDebutPivot}</span>` +
+      `<span class="stock-item">⚡ TP: ${s.tp}/${invDebutTp}</span>` +
+      `<span class="stock-item">↗️ Diag: ${s.diagonale}/${invDebutDiag}</span>`;
   }
+};
+
+PIVOT.renderPanneau = function() {
+  // Afficher deux cartes : Moi (card-me) + Adversaire (card-adv)
+  const monCamp = role;
+  const advCamp = autre(role);
+  PIVOT.renderCarteInventaire(document.getElementById('card-me'), monCamp, true);
+  PIVOT.renderCarteInventaire(document.getElementById('card-adv'), advCamp, false);
   // Aide
   const aide = document.getElementById('aide');
   const aides = {
@@ -329,25 +419,28 @@ PIVOT.cliquerCible = function(x, y) {
 
   // Cas TP en attente
   if (etat.enTp) {
-    // Le prochain clic est le déplacement après tp
-    // On détermine si c'est un glisser/virage/diagonale selon le mode sélectionné
     let depType = mode;
     if (depType === 'tp' || depType === 'borne') depType = 'glisser';
     sock.emit('play.action', { type: 'tp_suite', deplacement: { type: depType, to: { x, y } } });
+    PIVOT.sounds && PIVOT.sounds.play(depType === 'virage' ? 'virage' : (depType === 'diagonale' ? 'diagonale' : 'move'));
     return;
   }
 
   if (mode === 'borne') {
     sock.emit('play.action', { type: 'borne', to: { x, y } });
+    PIVOT.sounds && PIVOT.sounds.play('borne');
     return;
   }
   if (mode === 'tp') {
-    // Envoyer tp, puis le serveur garde en attente du déplacement
     sock.emit('play.action', { type: 'tp', to: { x, y } });
+    PIVOT.sounds && PIVOT.sounds.play('tp');
     return;
   }
   // glisser, virage, diagonale
   sock.emit('play.action', { type: mode, to: { x, y } });
+  PIVOT.sounds && PIVOT.sounds.play(mode === 'virage' ? 'virage' : (mode === 'diagonale' ? 'diagonale' : 'move'));
+  // Revenir en mode Glisser après envoi du coup (sera reaffiné si le serveur confirme)
+  mode = 'glisser';
 };
 
 PIVOT.envoyerEchange = function(garder) {
@@ -371,35 +464,98 @@ PIVOT.montrerApercu = function(ev) {
   }
 };
 
-// ==== Fin de partie ====
+// ==== Écran de fin style Brawl Stars ====
 PIVOT.renderFin = function(data) {
-  // Construire un voile au-dessus du plateau
-  const voile = document.createElement('div');
-  voile.className = 'voile';
-  let h = '<h2>' + (etat && etat.noms[etat.gagnant] || 'Partie') + '</h2>';
-  h += '<p>' + (data.forfait ? 'Victoire par forfait (déconnexion).' : 'Le perdant est bloqué.') + '</p>';
-  h += '<div class="recap">';
-  if (typeof data.pc === 'number') h += `<div>🪙 ${data.pc >= 0 ? '+' : ''}${data.pc} PC</div>`;
-  if (typeof data.tr === 'number') h += `<div>🏆 ${data.tr >= 0 ? '+' : ''}${data.tr} TR</div>`;
-  if (typeof data.eloDelta === 'number') h += `<div>🎯 ${data.eloDelta >= 0 ? '+' : ''}${data.eloDelta} Elo</div>`;
-  if (data.montees && data.montees.length) {
-    h += '<div style="color:var(--jaune);font-family:Lilita One,cursive;margin-top:8px;">MONTÉES DE RANK!</div>';
-    for (const m of data.montees) {
-      h += `<div>→ ${m.rang} (${m.recompenses})</div>`;
+  // Son de fin
+  if (etat && etat.gagnant === role) {
+    PIVOT.sounds && PIVOT.sounds.play('win');
+    if (data.montees && data.montees.length) {
+      setTimeout(() => PIVOT.sounds && PIVOT.sounds.play('rankup'), 800);
     }
+  } else {
+    PIVOT.sounds && PIVOT.sounds.play('lose');
   }
-  h += '</div>';
-  h += '<button class="btn" onclick="window.location.href=\'/\'">Retour à l\'accueil</button>';
-  h += '<button class="btn btn-vert" onclick="window.location.href=\'/play\'">Rejouer</button>';
-  voile.innerHTML = h;
+
+  // Récupérer l'inventaire restant de chacun
+  const monStock = etat.stock[role] || { bornes: 0, virage: 0, tp: 0, diagonale: 0 };
+  const advStock = etat.stock[autre(role)] || { bornes: 0, virage: 0, tp: 0, diagonale: 0 };
+
+  // Construire un écran de fin plein écran par-dessus la page
+  // On retire un éventuel précédent
+  const old = document.getElementById('end-screen');
+  if (old) old.remove();
+
+  const won = (etat.gagnant === role);
+  const reasonText = data.forfait
+    ? (won ? 'Victoire par forfait' : 'Perdu par forfait (déconnexion ou abandon)')
+    : (won ? 'L\'adversaire est bloqué !' : 'Tu es bloqué — plus aucun mouvement.');
+
+  // En-tête VICTOIRE / DÉFAITE
+  const titleColor = won ? '#06D6A0' : '#E63946';
+  const titleText = won ? 'VICTOIRE' : 'DÉFAITE';
+
+  // Récompenses
+  let recH = '';
+  if (typeof data.pc === 'number') recH += `<div class="reward-line"><span class="reward-icon">🪙</span><span class="reward-amount">${data.pc >= 0 ? '+' : ''}${data.pc} PC</span></div>`;
+  if (typeof data.tr === 'number') recH += `<div class="reward-line"><span class="reward-icon">🏆</span><span class="reward-amount">${data.tr >= 0 ? '+' : ''}${data.tr} TR</span></div>`;
+  if (typeof data.eloDelta === 'number') recH += `<div class="reward-line"><span class="reward-icon">🎯</span><span class="reward-amount">${data.eloDelta >= 0 ? '+' : ''}${data.eloDelta} Elo</span></div>`;
+  if (data.montees && data.montees.length) {
+    recH += '<div class="rankup-block">';
+    recH += '<div class="rankup-title">⭐ MONTÉE DE RANK !</div>';
+    for (const m of data.montees) {
+      recH += `<div class="rankup-line">→ ${escapeHtml(m.rang)} (${escapeHtml(m.recompenses || '')})</div>`;
+    }
+    recH += '</div>';
+  }
+
+  // Inventaires restants
+  function invHtml(stock, label) {
+    return `<div class="inv-end">
+      <div class="inv-end-label">${label}</div>
+      <div class="inv-end-grid">
+        <div class="inv-end-item"><div class="icon">❌</div><div>${stock.bornes}/3 bornes</div></div>
+        <div class="inv-end-item"><div class="icon">🔄</div><div>${stock.virage} virages</div></div>
+        <div class="inv-end-item"><div class="icon">⚡</div><div>${stock.tp} TP</div></div>
+        <div class="inv-end-item"><div class="icon">↗️</div><div>${stock.diagonale} diag</div></div>
+      </div>
+    </div>`;
+  }
+
+  const end = document.createElement('div');
+  end.id = 'end-screen';
+  end.className = 'end-screen';
+  end.innerHTML = `
+    <div class="end-card">
+      <div class="end-title" style="color:${titleColor};text-shadow:3px 3px 0 rgba(0,0,0,0.4);">${titleText}</div>
+      <div class="end-subtitle">${won ? (etat.noms[etat.gagnant] + ' remporte la partie') : ((etat.noms[autre(role)] || 'Adversaire') + ' gagne')}</div>
+      <div class="end-reason">${escapeHtml(reasonText)}</div>
+
+      <div class="end-section">
+        <div class="end-section-title">Récompenses</div>
+        ${recH || '<div class="muted">Aucune récompense.</div>'}
+      </div>
+
+      <div class="end-section">
+        <div class="end-section-title">Inventaire restant</div>
+        <div class="end-inv-row">
+          ${invHtml(monStock, 'Moi')}
+          ${invHtml(advStock, adversairePseudo || 'Adversaire')}
+        </div>
+      </div>
+
+      <div class="end-buttons">
+        <button class="btn btn-large" onclick="window.location.href='/'">🏠 Menu</button>
+        <button class="btn btn-vert btn-large" onclick="window.location.href='/play'">🔄 Rejouer</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(end);
+
   // Confettis si on a gagné
-  if (data.pc > 0 && etat && etat.gagnant === role) PIVOT.lancerConfettis();
-  // Insérer le voile dans le plateau parent
-  const plateau = document.getElementById('plateau');
-  plateau.style.position = 'relative';
-  plateau.appendChild(voile);
+  if (won) PIVOT.lancerConfettis();
 };
 
+// Confettis
 PIVOT.lancerConfettis = function() {
   const cont = document.createElement('div');
   cont.className = 'confetti-container';
@@ -416,3 +572,7 @@ PIVOT.lancerConfettis = function() {
   }
   setTimeout(() => cont.remove(), 3500);
 };
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+}

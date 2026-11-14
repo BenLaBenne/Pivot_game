@@ -89,8 +89,10 @@ function appliquerBorne(e, cote, to) {
   if (!to || !dansGrille(to.x, to.y)) return { ok: false, err: 'Cible invalide.' };
   if (e.cases[to.y][to.x] !== null) return { ok: false, err: 'Ce point est bloqué.' };
   if (e.pivot.x === to.x && e.pivot.y === to.y) return { ok: false, err: 'Ne peut poser une borne sur le pivot.' };
-  // Règle v2 : ne peut poser une borne que si on avait au moins un mouvement possible
-  if (!peutBouger(e, cote)) return { ok: false, err: 'Bloqué : une borne ne sauve pas.' };
+  // Règle v2 : une borne NE sauve pas. Si le joueur n'a aucun mouvement possible
+  // (glissement, virage, diagonale, tp), il a déjà perdu — même s'il lui reste des bornes.
+  // On rejette donc la pose de borne dans ce cas.
+  if (!peutBouger(e, cote)) return { ok: false, err: 'Aucun mouvement possible : une borne ne sauve pas. Tu as perdu.' };
   e.cases[to.y][to.x] = { type: 'borne', cote };
   e.stock[cote].bornes -= 1;
   finDeTour(e);

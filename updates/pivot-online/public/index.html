@@ -15,6 +15,7 @@
       <a href="/tournaments">Tournois</a>
       <a href="/shop">Boutique</a>
       <a href="/leaderboard">Classement</a>
+      <a href="/admin" id="nav-admin" style="display:none;color:var(--jaune);">Admin</a>
       <a href="#" id="btn-logout">Déconnexion</a>
     </nav>
   </div>
@@ -108,9 +109,10 @@ function renderProfile(u) {
   document.getElementById('stat-won').textContent = u.matches_won;
   const rate = u.matches_played ? Math.round(100 * u.matches_won / u.matches_played) : 0;
   document.getElementById('stat-rate').textContent = rate + '%';
+  // Afficher le lien admin si l'utilisateur est admin
+  const navAdmin = document.getElementById('nav-admin');
+  if (navAdmin) navAdmin.style.display = u.is_admin ? 'inline-block' : 'none';
   // Rank
-  const rank = PIVOT.rangPourTR ? PIVOT.rangPourTR(u.trophies) : null;
-  // On calcule le rank côté serveur via /api/leaderboard si besoin — sinon on l'affiche en clair
   const rankEl = document.getElementById('rank');
   fetch('/api/leaderboard/user/' + encodeURIComponent(u.pseudo))
     .then(r => r.json())

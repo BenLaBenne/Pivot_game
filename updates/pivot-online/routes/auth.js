@@ -68,10 +68,14 @@ router.post('/login', async (req, res) => {
     const r = await pool.query('SELECT * FROM users WHERE pseudo = $1', [pseudo]);
     if (r.rowCount === 0) return res.status(401).json({ error: 'Pseudo ou mot de passe incorrect.' });
     const user = r.rows[0];
+    if (user.banned) {
+      const reason = user.banned_reason || 'Aucune raison fournie.';
+      return res.status(403).json({ error: 'Ce compte est banni. Raison : ' + reason });
+    }
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) return res.status(401).json({ error: 'Pseudo ou mot de passe incorrect.' });
     const token = makeToken(user);
-    res.json({ token, user: { id: user.id, pseudo: user.pseudo, elo: user.elo, trophies: user.trophies, pc: user.pc_balance } });
+    res.json({ token, user: { id: user.id, pseudo: user.pseudo, elo: user.elo, trophies: user.trophies, pc: user.pc_balance, is_admin: user.is_admin } });
   } catch (e) {
     console.error('[auth] login:', e);
     res.status(500).json({ error: 'Erreur serveur.' });
@@ -82,12 +86,13 @@ router.post('/login', async (req, res) => {
 router.get('/me', authMiddleware, async (req, res) => {
   try {
     const r = await pool.query(
-      `SELECT id, pseudo, elo, trophies, pc_balance, win_streak, matches_played, matches_won, matches_lost
+      `SELECT id, pseudo, elo, trophies, pc_balance, win_streak, matches_played, matches_won, matches_lost, is_admin, banned
        FROM users WHERE id = $1`,
       [req.user.id]
     );
     if (r.rowCount === 0) return res.status(404).json({ error: 'Utilisateur introuvable.' });
     const u = r.rows[0];
+    if (u.banned) return res.status(403).json({ error: 'Votre compte est banni.' });
     const inv = await pool.query(
       `SELECT ability_type, quantity FROM user_inventory WHERE user_id = $1`,
       [req.user.id]
@@ -105,6 +110,7 @@ router.get('/me', authMiddleware, async (req, res) => {
         id: u.id, pseudo: u.pseudo, elo: u.elo, trophies: u.trophies,
         pc: u.pc_balance, win_streak: u.win_streak,
         matches_played: u.matches_played, matches_won: u.matches_won, matches_lost: u.matches_lost,
+        is_admin: u.is_admin,
         inventaire, coffres: coffres.rows
       }
     });

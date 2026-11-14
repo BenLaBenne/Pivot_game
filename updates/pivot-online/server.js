@@ -30,12 +30,16 @@ const shopRoutes = require('./routes/shop');
 const roomsRoutes = require('./routes/rooms');
 const tournamentsRoutes = require('./routes/tournaments');
 const leaderboardRoutes = require('./routes/leaderboard');
+const adminRoutes = require('./routes/admin');
+const reportsRoutes = require('./routes/reports');
 
 app.use('/api/auth', authRoutes.router);
 app.use('/api/shop', shopRoutes);
 app.use('/api/rooms', roomsRoutes);
 app.use('/api/tournaments', tournamentsRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/reports', reportsRoutes);
 
 // Health check pour render.com
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
@@ -49,7 +53,8 @@ const pagesMap = {
   '/shop': 'shop.html',
   '/leaderboard': 'leaderboard.html',
   '/tournaments': 'tournaments.html',
-  '/profile': 'profile.html'
+  '/profile': 'profile.html',
+  '/admin': 'admin.html'
 };
 for (const [path_, file] of Object.entries(pagesMap)) {
   app.get(path_, (req, res) => res.sendFile(path.join(__dirname, 'public', file)));

@@ -227,6 +227,35 @@ function register(io) {
       }
     });
 
+    // === Quitter la partie volontairement ===
+    // Le quitter perd par forfait. L'adversaire reçoit la MOITIÉ des gains normaux
+    // et est informé par un message. Le match se termine immédiatement.
+    socket.on('play.quit', async () => {
+      const matchId = socketToMatch.get(socket.id);
+      if (!matchId) return socket.emit('match.error', { error: 'Aucune partie en cours.' });
+      const m = matchsEnCours.get(matchId);
+      if (!m) return socket.emit('match.error', { error: 'Partie introuvable.' });
+      if (m.etat.gagnant) return; // déjà fini
+
+      // Le quitter est le perdant
+      let cotePerdant;
+      if (m.p1Id === socket.userId) cotePerdant = 'R';
+      else if (m.p2Id === socket.userId) cotePerdant = 'B';
+      else return socket.emit('match.error', { error: 'Vous n\'êtes pas dans cette partie.' });
+
+      m.etat.gagnant = (cotePerdant === 'R') ? 'B' : 'R';
+      m.forfait = true;
+      m.quit = true; // → moitié des gains pour l'adversaire
+
+      // Informer l'adversaire qu'il a été quitté
+      const advSocketId = (cotePerdant === 'R') ? m.p2 : m.p1;
+      io.to(advSocketId).emit('match.quit-notify', {
+        message: 'Ton adversaire a quitté la partie. Tu reçois la moitié des gains.'
+      });
+
+      await finirMatch(io, matchId);
+    });
+
     // === Déconnexion ===
     socket.on('disconnect', async () => {
       // Retirer de la file
@@ -243,6 +272,11 @@ function register(io) {
           const cotePerdant = (m.p1Id === socket.userId) ? 'R' : 'B';
           m.etat.gagnant = (cotePerdant === 'R') ? 'B' : 'R';
           m.forfait = true;
+          // Informer l'adversaire
+          const advSocketId = (cotePerdant === 'R') ? m.p2 : m.p1;
+          io.to(advSocketId).emit('match.quit-notify', {
+            message: 'Ton adversaire s\'est déconnecté.'
+          });
           await finirMatch(io, matchId);
         }
         socketToMatch.delete(socket.id);
@@ -276,11 +310,24 @@ async function creerMatch(io, opts) {
   etat.noms = { R: p1.pseudo, B: p2.pseudo };
   etat.ids = { R: p1.userId, B: p2.userId };
 
+  // Charger l'inventaire DB des deux joueurs pour initialiser le stock de la partie
+  const invP1 = await chargerInventaire(p1.userId);
+  const invP2 = await chargerInventaire(p2.userId);
+  // Bornes toujours 3 (gratuites). Les autres capacités viennent de l'inventaire DB.
+  // Cap minimum: au moins 1 virage (règle anti-blocage).
+  etat.stock.R = { bornes: 3, virage: Math.max(1, invP1.pivot || 0), tp: invP1.tp || 0, diagonale: invP1.diagonale || 0 };
+  // Virage v2: max 2 par partie. On plafonne à 2 pour éviter qu'un riche joueur ait 50 virages.
+  etat.stock.R.virage = Math.min(2, etat.stock.R.virage);
+  etat.stock.R.tp = Math.min(1, etat.stock.R.tp);
+  etat.stock.R.diagonale = Math.min(1, etat.stock.R.diagonale);
+  etat.stock.B = { bornes: 3, virage: Math.min(2, Math.max(1, invP2.pivot || 0)), tp: Math.min(1, invP2.tp || 0), diagonale: Math.min(1, invP2.diagonale || 0) };
+
   const m = {
     dbId: db.rows[0].id,
     etat, type,
     p1: p1.socketId, p2: p2.socketId,
     p1Id: p1.userId, p2Id: p2.userId,
+    invDebut: { R: invP1, B: invP2 },
     roomCode, tournamentId,
     startedAt: Date.now()
   };
@@ -293,11 +340,15 @@ async function creerMatch(io, opts) {
   // Informer les deux
   io.to(p1.socketId).emit('match.start', {
     matchId, role: 'R', adversaire: { pseudo: p2.pseudo, elo: p2.elo },
-    etat: state.vuePublique(etat)
+    etat: state.vuePublique(etat),
+    inventaireMoi: invP1,
+    inventaireAdversaire: invP2
   });
   io.to(p2.socketId).emit('match.start', {
     matchId, role: 'B', adversaire: { pseudo: p1.pseudo, elo: p1.elo },
-    etat: state.vuePublique(etat)
+    etat: state.vuePublique(etat),
+    inventaireMoi: invP2,
+    inventaireAdversaire: invP1
   });
   io.to('match_' + matchId).emit('match.update', state.vuePublique(etat));
   return matchId;
@@ -332,6 +383,17 @@ async function finirMatch(io, matchId) {
   } else { // tournament
     pcGagnant = 15; pcPerdant = 5;
     trGagnant = 40; trPerdant = -10;
+  }
+
+  // Si l'adversaire a quitté volontairement (m.quit), il ne reçoit que la MOITIÉ des gains
+  // et le perdant ne reçoit rien (pas de PC, pas de TR, juste la défaite).
+  if (m.quit) {
+    pcGagnant = Math.floor(pcGagnant / 2);
+    trGagnant = Math.floor(trGagnant / 2);
+    pcPerdant = 0;
+    trPerdant = Math.floor(trPerdant / 2); // moitié de la perte
+  } else if (m.forfait) {
+    // Forfait (déconnexion): l'adversaire gagne normalement, le perdant a les gains de défaite normaux.
   }
 
   // Win streak (uniquement en ranked)
@@ -392,12 +454,14 @@ async function finirMatch(io, matchId) {
       winner: e.gagnant,
       pc: pcGagnantFinal, tr: trGagnant, eloDelta: (gagnantId === m.p1Id ? deltaA : deltaB),
       forfait: !!m.forfait,
+      quit: !!m.quit,
       montees
     };
     const recapPerdant = {
       winner: e.gagnant,
       pc: pcPerdant, tr: trPerdant, eloDelta: (perdantId === m.p1Id ? deltaA : deltaB),
-      forfait: !!m.forfait
+      forfait: !!m.forfait,
+      quit: !!m.quit
     };
     io.to(m.p1).emit('match.end', (m.p1Id === gagnantId) ? recapGagnant : recapPerdant);
     io.to(m.p2).emit('match.end', (m.p2Id === gagnantId) ? recapGagnant : recapPerdant);

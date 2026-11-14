@@ -20,7 +20,14 @@ Cette plateforme ajoute à la version navigateur solo un univers complet :
 - Boutique : capacités à l'unité + 5 niveaux de coffres
 - Système de rank à **18 paliers** (6 tiers × 3 niveaux) avec récompenses automatiques
 - Classement public (par TR, par tier, par win rate) avec pagination
-- Profils publics
+- Profils publics avec bouton **Signaler**
+- **Page admin** : gestion des comptes (suppression, ban, don d'objets, promotion admin), gestion des signalements, logs admin
+- **Sons** générés via Web Audio API (clics, mouvements, victoire, montée de rank, ouverture de coffre, etc.)
+- **Bouton Quitter** pendant une partie : l'adversaire reçoit la moitié des gains, message envoyé
+- **Écran de fin style Brawl Stars** : VICTOIRE/DÉFAITE en gros, inventaire restant des deux joueurs, récompenses, montées de rank, bouton retour menu
+- **Menu déroulant des règles** pendant une partie
+- Inventaire en partie affiché clairement : **Moi** vs **Adversaire** avec les valeurs de départ (DB)
+- Retour automatique en mode **Glisser** après chaque utilisation de capacité
 
 ## Stack technique
 
@@ -118,6 +125,23 @@ Voir `.env.example`. Les variables utilisées sont :
 - `GET /api/leaderboard?tier=Plastique&sort=tr&page=1` — liste paginée
 - `GET /api/leaderboard/user/:pseudo` — profil public d'un joueur
 
+### Reports (`/api/reports`)
+- `POST /api/reports` (Bearer) — `{ reportedId, reason, details? }` crée un signalement
+- `GET /api/reports/reasons` — liste des raisons possibles (`triche`, `comportement_toxique`, `pseudo_inapproprie`, `spam`, `autre`)
+
+### Admin (`/api/admin`) — toutes les routes exigent `is_admin = true`
+- `GET /api/admin/stats` — statistiques globales (utilisateurs, bannis, admins, matchs, signalements ouverts, PC total)
+- `GET /api/admin/users?page=1&search=` — liste paginée des utilisateurs (avec inventaire, is_admin, banned)
+- `POST /api/admin/users/:id/delete` — supprime un compte (interdit si admin)
+- `POST /api/admin/users/:id/ban` — `{ reason }` bannit un compte (interdit si admin)
+- `POST /api/admin/users/:id/unban` — débannit
+- `POST /api/admin/users/:id/give` — `{ pc?, tp?, diagonale?, pivot?, coffre? }` donne des objets en quantité arbitraire
+- `POST /api/admin/users/:id/set-admin` — `{ isAdmin }` promeut/rétrograde admin
+- `POST /api/admin/users/:id/reset-stats` — réinitialise Elo/TR/streak
+- `GET /api/admin/reports?status=open` — liste des signalements par statut
+- `POST /api/admin/reports/:id/resolve` — `{ note, dismiss }` résout ou écarte un signalement
+- `GET /api/admin/logs` — historique des actions admin (200 dernières)
+
 ### Divers
 - `GET /api/health` — health check utilisé par render.com
 
@@ -133,14 +157,16 @@ Le client se connecte avec `{ auth: { token: '<JWT>' } }`. Events :
 - `tournament.join` `{ id, code? }` — s'inscrit à un tournoi
 - `tournament.start` `{ id }` — lance un tournoi (créateur)
 - `play.action` — intention de coup (voir ci-dessous)
+- `play.quit` — abandonne la partie (l'adversaire reçoit la moitié des gains)
 - `disconnect`
 
 **Serveur → Client**
 - `queue.update` `{ position }`
-- `match.start` `{ matchId, role: 'R'|'B', adversaire, etat }`
+- `match.start` `{ matchId, role: 'R'|'B', adversaire, etat, inventaireMoi, inventaireAdversaire }`
 - `match.update` `etat` (vue publique du plateau)
-- `match.end` `{ winner, pc, tr, eloDelta, montees, forfait }`
+- `match.end` `{ winner, pc, tr, eloDelta, montees, forfait, quit }`
 - `match.error` `{ error }`
+- `match.quit-notify` `{ message }` — informe l'adversaire qu'il a été quitté
 - `room.update` `{ code, status }`
 - `tournament.update` `{ id, ... }`
 
@@ -160,7 +186,7 @@ Toutes les actions renvoient `{ ok: true }` ou `{ ok: false, err }` via `match.e
 
 Voir `init-db.js` pour la liste complète. Tables principales :
 
-- `users` (pseudo unique, password_hash, elo, trophies, pc_balance, win_streak, best_streak, matches_played/won/lost)
+- `users` (pseudo unique, password_hash, elo, trophies, pc_balance, win_streak, best_streak, matches_played/won/lost, **is_admin**, **banned**, **banned_reason**, **banned_at**)
 - `user_inventory` (user_id, ability_type 'tp'|'diagonale'|'pivot', quantity)
 - `user_chests` (id, user_id, chest_level, status 'unopened'|'opened')
 - `matches` (player1_id, player2_id, winner_id, match_type, status, elo_change, pc_earned, tr_earned, room_code, tournament_id)
@@ -171,6 +197,18 @@ Voir `init-db.js` pour la liste complète. Tables principales :
 - `purchases` (audit des achats en boutique)
 - `rank_history` (historique des montées de rank)
 - `chest_openings` (audit des coffres ouverts)
+- **`reports`** (reporter_id, reported_id, reason, details, status 'open'|'resolved'|'dismissed', admin_id, admin_note)
+- **`admin_logs`** (admin_id, action, target_id, details) — audit des actions admin
+
+### Promouvoir un admin
+
+Pour qu'un utilisateur devienne admin, il faut manuellement positionner `is_admin = TRUE` dans la table `users` (via la console SQL de render.com par exemple) :
+
+```sql
+UPDATE users SET is_admin = TRUE WHERE pseudo = 'ton_pseudo';
+```
+
+Une fois admin, l'utilisateur voit un lien **Admin** dans la barre de navigation et peut accéder à la page `/admin`.
 
 Le serveur est l'arbitre unique : tous les coups sont validés côté serveur, l'inventaire est décrémenté immédiatement à l'utilisation, et les montées de rank sont créditées automatiquement.
 

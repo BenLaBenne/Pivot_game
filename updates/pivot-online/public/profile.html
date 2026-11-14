@@ -25,6 +25,9 @@
       <div>
         <div class="pseudo" id="pseudo">…</div>
         <div class="stat-row" id="stat-row"></div>
+        <div class="stat-row mt-2">
+          <button class="btn btn-rouge btn-mini" id="btn-report">🚩 Signaler ce joueur</button>
+        </div>
       </div>
     </div>
   </div>
@@ -53,6 +56,11 @@ charger();
 
 async function charger() {
   if (!pseudo) { PIVOT.toast('Pseudo manquant.', 'error'); return; }
+  // Cacher le bouton signeler si on visite son propre profil
+  const me = PIVOT.getUser();
+  if (me && me.pseudo === pseudo) {
+    document.getElementById('btn-report')?.style.setProperty('display', 'none');
+  }
   try {
     const r = await PIVOT.api('GET', '/leaderboard/user/' + encodeURIComponent(pseudo));
     const u = r.user;
@@ -108,6 +116,29 @@ function guessRank(tr) {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
 }
+
+// Bouton Signaler
+document.getElementById('btn-report').addEventListener('click', async () => {
+  if (!PIVOT.isLoggedIn()) { PIVOT.toast('Connecte-toi pour signaler.', 'error'); return; }
+  if (!confirm(`Signaler ${pseudo} ?`)) return;
+  const reason = prompt(`Raison du signalement :
+- triche
+- comportement_toxique
+- pseudo_inapproprie
+- spam
+- autre
+
+Tape la raison:`, 'comportement_toxique');
+  if (!reason) return;
+  const details = prompt('Détails (optionnel):', '') || '';
+  try {
+    // Récupérer l'id du joueur
+    const r = await PIVOT.api('GET', '/leaderboard/user/' + encodeURIComponent(pseudo));
+    if (!r.user || !r.user.id) { PIVOT.toast('Joueur introuvable.', 'error'); return; }
+    await PIVOT.api('POST', '/reports', { reportedId: r.user.id, reason, details });
+    PIVOT.toast('Signalement envoyé aux admins.');
+  } catch (e) { PIVOT.toast(e.message, 'error'); }
+});
 </script>
 </body>
 </html>

@@ -85,6 +85,7 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/api.js"></script>
+<script src="/js/sounds.js"></script>
 <script>
 if (PIVOT.redirectIfLoggedOut()) {} else {
   charger();
@@ -139,25 +140,30 @@ async function charger() {
 }
 
 document.addEventListener('click', async (e) => {
+  // Déverrouiller l'audio au premier clic
+  PIVOT.sounds && PIVOT.sounds.unlock();
+
   const t = e.target.closest('[data-buy]');
   if (t) {
+    PIVOT.sounds && PIVOT.sounds.play('click');
     const type = t.dataset.buy;
     const q = parseInt(document.getElementById('q-' + type).value, 10) || 1;
     try {
       const r = await PIVOT.api('POST', '/shop/buy-capacite', { type, quantite: q });
       PIVOT.toast(`Acheté ${q} ${type} pour ${r.depense} PC.`);
       charger();
-    } catch (err) { PIVOT.toast(err.message, 'error'); }
+    } catch (err) { PIVOT.sounds && PIVOT.sounds.play('error'); PIVOT.toast(err.message, 'error'); }
     return;
   }
   const t2 = e.target.closest('[data-buy-chest]');
   if (t2) {
+    PIVOT.sounds && PIVOT.sounds.play('click');
     const lvl = parseInt(t2.dataset.buyChest, 10);
     try {
       const r = await PIVOT.api('POST', '/shop/buy-chest', { niveau: lvl });
       PIVOT.toast(`Coffre niv.${lvl} acheté pour ${r.depense} PC.`);
       charger();
-    } catch (err) { PIVOT.toast(err.message, 'error'); }
+    } catch (err) { PIVOT.sounds && PIVOT.sounds.play('error'); PIVOT.toast(err.message, 'error'); }
     return;
   }
   const t3 = e.target.closest('[data-open-chest]');
@@ -166,11 +172,10 @@ document.addEventListener('click', async (e) => {
     try {
       const r = await PIVOT.api('POST', '/shop/open-chest', { chestId: id });
       PIVOT.toast(`Coffre niv.${r.niveau} ouvert : ${r.recap} !`);
-      PIVOT.lancerConfettis && PIVOT.lancerConfettis();
-      // confettis locaux
+      PIVOT.sounds && PIVOT.sounds.play('chest');
       lancerConfettis();
       charger();
-    } catch (err) { PIVOT.toast(err.message, 'error'); }
+    } catch (err) { PIVOT.sounds && PIVOT.sounds.play('error'); PIVOT.toast(err.message, 'error'); }
     return;
   }
 });

@@ -17,11 +17,43 @@ CREATE TABLE IF NOT EXISTS users (
   matches_played INTEGER DEFAULT 0,
   matches_won INTEGER DEFAULT 0,
   matches_lost INTEGER DEFAULT 0,
+  is_admin BOOLEAN DEFAULT FALSE,
+  banned BOOLEAN DEFAULT FALSE,
+  banned_reason TEXT,
+  banned_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_users_pseudo ON users(pseudo);
 CREATE INDEX IF NOT EXISTS idx_users_trophies ON users(trophies DESC);
 CREATE INDEX IF NOT EXISTS idx_users_elo ON users(elo);
+CREATE INDEX IF NOT EXISTS idx_users_banned ON users(banned);
+
+-- ===== Signalements =====
+CREATE TABLE IF NOT EXISTS reports (
+  id SERIAL PRIMARY KEY,
+  reporter_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  reported_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  reason VARCHAR(255) NOT NULL,
+  details TEXT,
+  status VARCHAR(16) DEFAULT 'open',  -- 'open', 'resolved', 'dismissed'
+  admin_id INTEGER REFERENCES users(id),
+  admin_note TEXT,
+  created_at TIMESTAMP DEFAULT NOW(),
+  resolved_at TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status);
+CREATE INDEX IF NOT EXISTS idx_reports_reported ON reports(reported_id);
+
+-- ===== Logs admin =====
+CREATE TABLE IF NOT EXISTS admin_logs (
+  id SERIAL PRIMARY KEY,
+  admin_id INTEGER REFERENCES users(id),
+  action VARCHAR(64) NOT NULL,  -- 'delete_user', 'ban', 'unban', 'give_item', 'set_admin', 'resolve_report'
+  target_id INTEGER,
+  details TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_adminlogs_admin ON admin_logs(admin_id);
 
 -- ===== Inventaire (capacités consommables) =====
 CREATE TABLE IF NOT EXISTS user_inventory (
@@ -135,6 +167,30 @@ CREATE TABLE IF NOT EXISTS chest_openings (
 async function initDb() {
   console.log('[init-db] Création / vérification du schéma...');
   await pool.query(SCHEMA);
+
+  // Migrations: ajouter les colonnes is_admin / banned / banned_reason / banned_at
+  // si la table users existe déjà sans elles (DB existante).
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name='users' AND column_name='is_admin') THEN
+        ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT FALSE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name='users' AND column_name='banned') THEN
+        ALTER TABLE users ADD COLUMN banned BOOLEAN DEFAULT FALSE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name='users' AND column_name='banned_reason') THEN
+        ALTER TABLE users ADD COLUMN banned_reason TEXT;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name='users' AND column_name='banned_at') THEN
+        ALTER TABLE users ADD COLUMN banned_at TIMESTAMP;
+      END IF;
+    END $$;
+  `);
   console.log('[init-db] Schéma OK.');
 }
 

@@ -2,97 +2,134 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PIVOT Online — Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PIVOT Online — Accueil</title>
 <link rel="stylesheet" href="/css/style.css">
 </head>
-<body>
-<div class="app-shell">
-  <div class="topbar">
-    <a href="/" class="logo">PIVOT</a>
-    <nav id="nav-links">
-      <a href="/play">Jouer</a>
-      <a href="/tournaments">Tournois</a>
-      <a href="/shop">Boutique</a>
-      <a href="/leaderboard">Classement</a>
-      <a href="/pass" style="color:var(--jaune);">Pass</a>
-      <a href="/admin" id="nav-admin" style="display:none;color:var(--jaune);">Admin</a>
-      <a href="#" id="btn-logout">Déconnexion</a>
-    </nav>
-  </div>
+<body class="page-home">
 
-  <!-- Profil -->
-  <div class="card">
-    <div class="profile">
-      <div class="avatar" id="avatar">?</div>
-      <div>
-        <div class="pseudo" id="pseudo">…</div>
-        <div class="stat-row" id="stat-row">
-          <span class="pill"><span class="icon">🏆</span><span id="rank">…</span></span>
-          <span class="pill"><span class="icon">⭐</span><span id="tr">0</span> TR</span>
-          <span class="pill"><span class="icon">🎯</span><span id="elo">1000</span> Elo</span>
-          <span class="pill"><span class="icon">🪙</span><span id="pc">0</span> PC</span>
-          <span class="pill"><span class="icon">🔥</span>Streak <span id="streak">0</span></span>
-        </div>
-        <div class="stat-row">
-          <span class="pill"><span class="icon">⚡</span>TP: <span id="inv-tp">0</span></span>
-          <span class="pill"><span class="icon">↗️</span>Diagonale: <span id="inv-diag">0</span></span>
-          <span class="pill"><span class="icon">🔄</span>Virage: <span id="inv-pivot">0</span></span>
-        </div>
-      </div>
-    </div>
-    <!-- Barre de progression vers le prochain rang -->
-    <div id="rank-progress" class="rank-progress mt-2"></div>
+<!-- ===== Top bar (ressources + avatar) ===== -->
+<header class="bs-topbar">
+  <div class="bs-resources">
+    <span class="bs-res"><span class="icon">🪙</span><span id="pc">0</span></span>
+    <span class="bs-res"><span class="icon">🏆</span><span id="tr">0</span></span>
+    <span class="bs-res"><span class="icon">🎯</span><span id="elo">1000</span></span>
   </div>
+  <div class="bs-profile">
+    <a href="/pass" class="bs-pass-badge" id="bs-pass-badge" title="Pass de Combat">
+      <span class="bs-pass-icon">🎫</span>
+      <span class="bs-pass-text"><span id="bs-pass-level">0</span></span>
+    </a>
+    <a href="/leaderboard" class="bs-res-btn"><span class="icon">🏆</span> <span id="rank">…</span></a>
+    <a href="/profile/me" class="bs-avatar-btn">
+      <span class="bs-avatar" id="avatar">?</span>
+      <span class="bs-pseudo" id="pseudo">…</span>
+    </a>
+    <a href="#" id="btn-logout" class="bs-logout" title="Déconnexion">🚪</a>
+  </div>
+</header>
 
-  <!-- Actions principales -->
-  <div class="card">
-    <h2 style="color:var(--bleu-fonce);">Jouer</h2>
-    <div class="grid grid-3 mt-2">
-      <button class="btn btn-large" onclick="window.location.href='/play'">⚡ Matchmaking ranked</button>
-      <button class="btn btn-bleu btn-large" id="btn-create-room">🔑 Créer un salon privé</button>
-      <button class="btn btn-violet btn-large" id="btn-join-room">🚪 Rejoindre un salon</button>
+<!-- ===== Bannière de saison ===== -->
+<div class="bs-season-banner" id="bs-season-banner">
+  <a href="/pass" class="bs-season-link">
+    <div class="bs-season-info">
+      <span id="bs-season-name">Saison</span>
+      <span class="muted" id="bs-season-days">— j restants</span>
     </div>
-  </div>
-
-  <div class="grid grid-2">
-    <div class="card">
-      <h2 style="color:var(--bleu-fonce);">🏆 Tournois</h2>
-      <p class="muted mb-2">Affronte plusieurs joueurs en bracket à élimination. Récompenses boostées.</p>
-      <button class="btn btn-large" onclick="window.location.href='/tournaments'">Voir les tournois</button>
+    <div class="bs-season-progress">
+      <div class="bs-season-bar"><div class="bs-season-fill" id="bs-season-fill"></div></div>
+      <span class="bs-season-xp"><span id="bs-season-xp-text">0/100 XP</span></span>
     </div>
-    <div class="card">
-      <h2 style="color:var(--bleu-fonce);">🪙 Boutique</h2>
-      <p class="muted mb-2">Achète des capacités à l'unité ou ouvre des coffres pour gagner plus.</p>
-      <button class="btn btn-vert btn-large" onclick="window.location.href='/shop'">Aller à la boutique</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2 style="color:var(--bleu-fonce);">📊 Stats</h2>
-    <div class="grid grid-3">
-      <div><strong id="stat-played">0</strong><br><span class="muted">Parties jouées</span></div>
-      <div><strong id="stat-won">0</strong><br><span class="muted">Victoires</span></div>
-      <div><strong id="stat-rate">0%</strong><br><span class="muted">Win rate</span></div>
-    </div>
-  </div>
-
-  <!-- Pass de Combat -->
-  <div class="card">
-    <h2 style="color:var(--bleu-fonce);">🎫 Pass de Combat</h2>
-    <div id="pass-mini" style="background:white;border:3px solid #1B2430;border-radius:12px;padding:12px;">
-      <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-family:'Lilita One',cursive;">
-        <span id="pass-mini-level">Niveau 0 / 30</span>
-        <span id="pass-mini-xp" style="opacity:0.7;">0 XP</span>
-      </div>
-      <div style="background:#eee;border:2px solid #1B2430;border-radius:10px;height:18px;overflow:hidden;">
-        <div id="pass-mini-fill" style="background:linear-gradient(90deg,#FFC107,#FF6B35);height:100%;width:0%;transition:width 0.4s;"></div>
-      </div>
-      <p class="muted mt-1" id="pass-mini-info" style="font-size:0.85rem;">Chargement...</p>
-      <button class="btn btn-mini mt-2" onclick="window.location.href='/pass'">Voir le Pass →</button>
-    </div>
-  </div>
+  </a>
 </div>
+
+<!-- ===== Menu principal (gros boutons style Brawl Stars) ===== -->
+<main class="bs-main">
+
+  <!-- Section "Jouer" — les boutons d'action principaux -->
+  <section class="bs-section bs-section-jouer">
+    <h2 class="bs-section-title">🎮 Jouer</h2>
+    <div class="bs-play-grid">
+      <button class="bs-play-btn bs-play-primary" onclick="window.location.href='/play'">
+        <span class="bs-play-icon">⚔️</span>
+        <span class="bs-play-label">Matchmaking</span>
+        <span class="bs-play-sub">Ranked • +Elo +TR</span>
+      </button>
+      <button class="bs-play-btn bs-play-blue" id="btn-create-room">
+        <span class="bs-play-icon">🔑</span>
+        <span class="bs-play-label">Créer salon</span>
+        <span class="bs-play-sub">Privé • avec un ami</span>
+      </button>
+      <button class="bs-play-btn bs-play-violet" id="btn-join-room">
+        <span class="bs-play-icon">🚪</span>
+        <span class="bs-play-label">Rejoindre salon</span>
+        <span class="bs-play-sub">Avec un code</span>
+      </button>
+      <button class="bs-play-btn bs-play-orange" onclick="window.location.href='/tournaments'">
+        <span class="bs-play-icon">🏆</span>
+        <span class="bs-play-label">Tournois</span>
+        <span class="bs-play-sub">Bracket • récompenses</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- Section "Shop / Pass" -->
+  <section class="bs-section bs-section-shop">
+    <h2 class="bs-section-title">🛒 Boutique & Pass</h2>
+    <div class="bs-cards-row">
+      <a href="/shop" class="bs-card-link">
+        <div class="bs-card bs-card-shop">
+          <div class="bs-card-icon">🛒</div>
+          <div class="bs-card-label">Boutique</div>
+          <div class="bs-card-sub">Capacités + coffres</div>
+        </div>
+      </a>
+      <a href="/pass" class="bs-card-link">
+        <div class="bs-card bs-card-pass">
+          <div class="bs-card-icon">🎫</div>
+          <div class="bs-card-label">Pass de Combat</div>
+          <div class="bs-card-sub" id="bs-card-pass-sub">Niveau 0 / 30</div>
+        </div>
+      </a>
+      <a href="/leaderboard" class="bs-card-link">
+        <div class="bs-card bs-card-leader">
+          <div class="bs-card-icon">🏆</div>
+          <div class="bs-card-label">Classement</div>
+          <div class="bs-card-sub">Top mondiaux</div>
+        </div>
+      </a>
+    </div>
+  </section>
+
+  <!-- Section "Stats" -->
+  <section class="bs-section bs-section-stats">
+    <h2 class="bs-section-title">📊 Mes stats</h2>
+    <div class="bs-stats-grid">
+      <div class="bs-stat"><div class="bs-stat-value" id="stat-played">0</div><div class="bs-stat-label">Parties</div></div>
+      <div class="bs-stat"><div class="bs-stat-value" id="stat-won">0</div><div class="bs-stat-label">Victoires</div></div>
+      <div class="bs-stat"><div class="bs-stat-value" id="stat-rate">0%</div><div class="bs-stat-label">Win rate</div></div>
+      <div class="bs-stat"><div class="bs-stat-value"><span id="streak">0</span> 🔥</div><div class="bs-stat-label">Streak</div></div>
+    </div>
+    <div class="bs-inventory-mini">
+      <h3 style="color:var(--bleu-fonce);margin-bottom:8px;">🎒 Inventaire</h3>
+      <div class="bs-inv-row">
+        <div class="bs-inv-tile"><div class="icon">⚡</div><div class="qte" id="inv-tp">0</div><div class="lbl">TP</div></div>
+        <div class="bs-inv-tile"><div class="icon">↗️</div><div class="qte" id="inv-diag">0</div><div class="lbl">Diag</div></div>
+        <div class="bs-inv-tile"><div class="icon">🔄</div><div class="qte" id="inv-pivot">0</div><div class="lbl">Virage</div></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ===== Bottom navigation (style Brawl Stars) ===== -->
+<nav class="bs-bottom-nav">
+  <a href="/" class="bs-nav-item active"><span class="bs-nav-icon">🏠</span><span class="bs-nav-label">Accueil</span></a>
+  <a href="/play" class="bs-nav-item"><span class="bs-nav-icon">⚔️</span><span class="bs-nav-label">Jouer</span></a>
+  <a href="/shop" class="bs-nav-item"><span class="bs-nav-icon">🛒</span><span class="bs-nav-label">Shop</span></a>
+  <a href="/pass" class="bs-nav-item"><span class="bs-nav-icon">🎫</span><span class="bs-nav-label">Pass</span></a>
+  <a href="/leaderboard" class="bs-nav-item"><span class="bs-nav-icon">🏆</span><span class="bs-nav-label">Top</span></a>
+  <a href="/profile/me" class="bs-nav-item"><span class="bs-nav-icon">👤</span><span class="bs-nav-label">Profil</span></a>
+</nav>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/api.js"></script>
@@ -104,7 +141,8 @@ async function loadMe() {
     const u = r.user;
     PIVOT.setUser(u);
     renderProfile(u);
-    loadMiniPass();  // charger le mini pass
+    loadMiniPass();
+    loadSeasonBanner();
   } catch (e) {
     if (e.message.includes('Token')) {
       PIVOT.clearToken();
@@ -112,26 +150,6 @@ async function loadMe() {
     } else {
       PIVOT.toast(e.message, 'error');
     }
-  }
-}
-
-// Charge le mini-pass pour le dashboard
-async function loadMiniPass() {
-  try {
-    const r = await PIVOT.api('GET', '/pass');
-    const p = r.pass;
-    document.getElementById('pass-mini-level').textContent = `Niveau ${p.level} / ${p.totalLevels}`;
-    document.getElementById('pass-mini-xp').textContent = `${p.xp} XP`;
-    document.getElementById('pass-mini-fill').style.width = p.pct + '%';
-    if (p.maxReached) {
-      document.getElementById('pass-mini-info').textContent = 'Niveau maximum atteint ! Bravo 🎉';
-    } else {
-      const remaining = p.nextLevelXp - p.xp;
-      document.getElementById('pass-mini-info').textContent =
-        `${remaining} XP restants pour le niveau ${p.level + 1} — ${r.season.daysRemaining}j restants dans la saison.`;
-    }
-  } catch (e) {
-    document.getElementById('pass-mini-info').textContent = '—';
   }
 }
 
@@ -149,82 +167,50 @@ function renderProfile(u) {
   document.getElementById('stat-won').textContent = u.matches_won;
   const rate = u.matches_played ? Math.round(100 * u.matches_won / u.matches_played) : 0;
   document.getElementById('stat-rate').textContent = rate + '%';
-  // Afficher le lien admin si l'utilisateur est admin (admin_level >= 1)
-  const navAdmin = document.getElementById('nav-admin');
-  if (navAdmin) {
-    const level = u.admin_level || (u.is_admin ? 1 : 0);
-    navAdmin.style.display = level >= 1 ? 'inline-block' : 'none';
-    if (level === 2) navAdmin.textContent = '👑 Admin';
-    else if (level === 1) navAdmin.textContent = '🛡️ Modo';
-  }
-  // Barre de progression vers le prochain rang
-  renderRankProgress(u.trophies);
-  // Rank (récupéré via fetchMe)
-  const rankEl = document.getElementById('rank');
-  rankEl.textContent = guessRank(u.trophies);
+  // Rank
+  document.getElementById('rank').textContent = guessRank(u.trophies);
+  // Lien profil
+  document.querySelector('.bs-avatar-btn').href = '/profile/' + encodeURIComponent(u.pseudo);
+  document.querySelector('.bs-nav-item[href="/profile/me"]').href = '/profile/' + encodeURIComponent(u.pseudo);
+  // Pass badge (top bar)
+  loadPassBadge();
 }
 
-// Affiche la barre de progression "TR actuel / TR prochain rang"
-function renderRankProgress(tr) {
-  const el = document.getElementById('rank-progress');
-  if (!el) return;
-  const R = [
-    [0,'Plastique 1'],[50,'Plastique 2'],[100,'Plastique 3'],
-    [150,'Bronze 1'],[250,'Bronze 2'],[350,'Bronze 3'],
-    [500,'Argent 1'],[650,'Argent 2'],[800,'Argent 3'],
-    [1000,'Fer 1'],[1200,'Fer 2'],[1400,'Fer 3'],
-    [1700,'Or 1'],[2000,'Or 2'],[2300,'Or 3'],
-    [2700,'Legendary 1'],[3100,'Legendary 2'],[3500,'Legendary 3']
-  ];
-  // Trouver rang actuel et prochain rang
-  let idx = 0;
-  for (let i = 0; i < R.length; i++) {
-    if (tr >= R[i][0]) idx = i;
-  }
-  const currentName = R[idx][1];
-  const currentTr = R[idx][0];
-  // Si on est au dernier rang, pas de prochain
-  if (idx === R.length - 1) {
-    el.innerHTML = `
-      <div style="text-align:center;padding:10px 14px;background:linear-gradient(180deg,#FFD700,#B8860B);border:3px solid #1B2430;border-radius:12px;color:#1B2430;font-weight:900;">
-        👑 Rang maximal atteint : ${currentName} (${tr} TR)
-      </div>`;
-    return;
-  }
-  const nextName = R[idx + 1][1];
-  const nextTr = R[idx + 1][0];
-  const trNeeded = nextTr - tr;  // TR restant à gagner
-  const trInRange = tr - currentTr;
-  const trRange = nextTr - currentTr;
-  const pct = Math.max(0, Math.min(100, Math.round(100 * trInRange / trRange)));
-  el.innerHTML = `
-    <div style="margin-bottom:6px;display:flex;justify-content:space-between;font-weight:800;">
-      <span>${currentName}</span>
-      <span style="opacity:0.7;">${tr} TR</span>
-      <span>${nextName}</span>
-    </div>
-    <div style="background:#eee;border:3px solid #1B2430;border-radius:12px;height:22px;overflow:hidden;">
-      <div style="background:linear-gradient(90deg,#FFC107,#FF6B35);height:100%;width:${pct}%;transition:width 0.4s;"></div>
-    </div>
-    <div style="text-align:center;margin-top:6px;font-size:0.9rem;color:var(--bleu-fonce);font-weight:800;">
-      ${trNeeded} TR restants pour atteindre <strong>${nextName}</strong>
-      <span class="muted" style="font-weight:normal;">(environ ${Math.ceil(trNeeded / 25)} victoires ranked)</span>
-    </div>`;
+// Charge juste le badge pass dans la top bar
+async function loadPassBadge() {
+  try {
+    const r = await PIVOT.api('GET', '/pass');
+    document.getElementById('bs-pass-level').textContent = r.pass.level;
+    document.getElementById('bs-card-pass-sub').textContent = `Niveau ${r.pass.level} / ${r.pass.totalLevels}`;
+  } catch (e) {}
 }
 
-// Approximation locale du rang
+// Charge la bannière de saison en haut
+async function loadSeasonBanner() {
+  try {
+    const r = await PIVOT.api('GET', '/pass');
+    const p = r.pass;
+    const s = r.season;
+    document.getElementById('bs-season-name').textContent = s.name;
+    document.getElementById('bs-season-days').textContent = s.daysRemaining + 'j restants';
+    if (p.maxReached) {
+      document.getElementById('bs-season-fill').style.width = '100%';
+      document.getElementById('bs-season-xp-text').textContent = 'NIVEAU MAX 🎉';
+    } else {
+      document.getElementById('bs-season-fill').style.width = p.pct + '%';
+      document.getElementById('bs-season-xp-text').textContent = `${p.xpInCurrentLevel}/${p.xpForNextLevel} XP • Niv. ${p.level}`;
+    }
+  } catch (e) {
+    document.getElementById('bs-season-name').textContent = '';
+    document.getElementById('bs-season-xp-text').textContent = '—';
+  }
+}
+
 function guessRank(tr) {
-  const R = [
-    [0,'Plastique 1'],[50,'Plastique 2'],[100,'Plastique 3'],
-    [150,'Bronze 1'],[250,'Bronze 2'],[350,'Bronze 3'],
-    [500,'Argent 1'],[650,'Argent 2'],[800,'Argent 3'],
-    [1000,'Fer 1'],[1200,'Fer 2'],[1400,'Fer 3'],
-    [1700,'Or 1'],[2000,'Or 2'],[2300,'Or 3'],
-    [2700,'Legendary 1'],[3100,'Legendary 2'],[3500,'Legendary 3']
-  ];
-  let s = R[0][1];
-  for (const [t, n] of R) if (tr >= t) s = n;
-  return s;
+  const R = [[0,'Plastique 1'],[50,'Plastique 2'],[100,'Plastique 3'],[150,'Bronze 1'],[250,'Bronze 2'],[350,'Bronze 3'],
+    [500,'Argent 1'],[650,'Argent 2'],[800,'Argent 3'],[1000,'Fer 1'],[1200,'Fer 2'],[1400,'Fer 3'],
+    [1700,'Or 1'],[2000,'Or 2'],[2300,'Or 3'],[2700,'Legendary 1'],[3100,'Legendary 2'],[3500,'Legendary 3']];
+  let s = R[0][1]; for (const [t, n] of R) if (tr >= t) s = n; return s;
 }
 
 // Boutons
@@ -238,7 +224,7 @@ document.getElementById('btn-create-room').addEventListener('click', async () =>
   try {
     const r = await PIVOT.api('POST', '/rooms/create', {});
     PIVOT.toast('Salon créé : ' + r.code);
-    setTimeout(() => window.location.href = '/room/' + r.code, 700);
+    setTimeout(() => window.location.href = '/room/' + r.code, 600);
   } catch (e) { PIVOT.toast(e.message, 'error'); }
 });
 

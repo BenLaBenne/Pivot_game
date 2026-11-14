@@ -759,12 +759,14 @@ async function finirMatch(io, matchId) {
 
     // ===== Pass de Combat : calculer XP et level-ups pour les deux joueurs =====
     let xpGagnant = 0, xpPerdant = 0;
-    let passGagnant = null, passPerdant = null;
+    let passGagnant = { xpGagne: 0, newXp: 0, newLevel: 0, levelsGained: 0, rewards: [] };
+    let passPerdant = { xpGagne: 0, newXp: 0, newLevel: 0, levelsGained: 0, rewards: [] };
     try {
       const coupsGagnant = (e.coupsParJoueur && e.coupsParJoueur[e.gagnant]) || 0;
       const coupsPerdant = (e.coupsParJoueur && e.coupsParJoueur[(e.gagnant === 'R') ? 'B' : 'R']) || 0;
       xpGagnant = pass.xpPourMatch(true, coupsGagnant);
       xpPerdant = pass.xpPourMatch(false, coupsPerdant);
+      console.log(`[pass] XP à créditer: gagnant=+${xpGagnant}, perdant=+${xpPerdant}`);
 
       // Charger le pass actuel des deux joueurs
       const passG = await pool.query('SELECT pass_xp, pass_level FROM users WHERE id = $1', [gagnantId]);
@@ -774,10 +776,13 @@ async function finirMatch(io, matchId) {
         const oldLevelG = passG.rows[0].pass_level || 0;
         const oldXpP = passP.rows[0].pass_xp || 0;
         const oldLevelP = passP.rows[0].pass_level || 0;
+        console.log(`[pass] Avant: gagnant lvl=${oldLevelG} xp=${oldXpG}, perdant lvl=${oldLevelP} xp=${oldXpP}`);
 
         // Calculer nouveaux XP + level-ups
         const resG = pass.applyXp(oldXpG, oldLevelG, xpGagnant);
         const resP = pass.applyXp(oldXpP, oldLevelP, xpPerdant);
+        console.log(`[pass] Après: gagnant lvl=${resG.newLevel} xp=${resG.newXp} (+${resG.levelsGained} niveaux, ${resG.newRewards.length} récompenses)`);
+        console.log(`[pass] Après: perdant lvl=${resP.newLevel} xp=${resP.newXp} (+${resP.levelsGained} niveaux, ${resP.newRewards.length} récompenses)`);
 
         // Mettre à jour en DB
         await pool.query('UPDATE users SET pass_xp = $1, pass_level = $2 WHERE id = $3',
@@ -788,13 +793,19 @@ async function finirMatch(io, matchId) {
         // Créditer les récompenses des nouveaux niveaux (gagnant)
         let recompRecapG = [];
         for (const reward of resG.newRewards) {
-          try { const recap = await appliquerRecompense(gagnantId, reward); if (recap) recompRecapG.push(recap); }
-          catch (eR) { console.error('[pass] crédit reward gagnant:', eR.message); }
+          try {
+            const recap = await appliquerRecompense(gagnantId, reward);
+            console.log(`[pass] Récompense gagnant niv.${reward.level} créditée: ${recap}`);
+            if (recap) recompRecapG.push(recap);
+          } catch (eR) { console.error('[pass] crédit reward gagnant:', eR.message); }
         }
         let recompRecapP = [];
         for (const reward of resP.newRewards) {
-          try { const recap = await appliquerRecompense(perdantId, reward); if (recap) recompRecapP.push(recap); }
-          catch (eR) { console.error('[pass] crédit reward perdant:', eR.message); }
+          try {
+            const recap = await appliquerRecompense(perdantId, reward);
+            console.log(`[pass] Récompense perdant niv.${reward.level} créditée: ${recap}`);
+            if (recap) recompRecapP.push(recap);
+          } catch (eR) { console.error('[pass] crédit reward perdant:', eR.message); }
         }
 
         passGagnant = {

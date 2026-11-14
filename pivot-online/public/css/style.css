@@ -786,6 +786,381 @@ h3 { font-size: 1.2rem; }
 }
 .pass-levelup-line { font-size: 0.9rem; }
 
+/* ============================================================
+   ACCUEIL — Style Brawl Stars (v2)
+   ============================================================ */
+
+/* ----- Body / fond ----- */
+body.page-home {
+  padding-bottom: 90px;  /* place pour bottom nav */
+}
+
+/* ----- Top bar ----- */
+.bs-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: linear-gradient(180deg, rgba(0,0,0,0.7), rgba(0,0,0,0.5));
+  backdrop-filter: blur(8px);
+  border-bottom: 3px solid rgba(255,255,255,0.15);
+}
+.bs-resources {
+  display: flex;
+  gap: 8px;
+}
+.bs-res {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: linear-gradient(180deg, #fff, #f0f0f0);
+  border: 3px solid #1B2430;
+  border-radius: 18px;
+  font-weight: 900;
+  font-size: 0.9rem;
+  color: #1B2430;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.4);
+}
+.bs-res .icon { font-size: 1rem; }
+.bs-profile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bs-pass-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  background: linear-gradient(180deg, #FFC107, #FF6B35);
+  border: 3px solid #1B2430;
+  border-radius: 14px;
+  color: #1B2430;
+  text-decoration: none;
+  font-weight: 900;
+  font-size: 0.85rem;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.4);
+  transition: transform 0.1s;
+}
+.bs-pass-badge:hover { transform: translateY(-2px); }
+.bs-pass-badge:active { transform: translateY(1px); }
+.bs-res-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: linear-gradient(180deg, #06D6A0, #2E7D32);
+  border: 3px solid #1B2430;
+  border-radius: 18px;
+  color: white;
+  text-decoration: none;
+  font-weight: 900;
+  font-size: 0.85rem;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.4);
+}
+.bs-avatar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 4px 4px;
+  background: linear-gradient(180deg, #4FC3F7, #1976D2);
+  border: 3px solid #1B2430;
+  border-radius: 22px;
+  color: white;
+  text-decoration: none;
+  font-weight: 900;
+  font-size: 0.95rem;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.4);
+  transition: transform 0.1s;
+}
+.bs-avatar-btn:hover { transform: translateY(-2px); }
+.bs-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #FFC107, #FF6B35);
+  border: 2px solid #1B2430;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Lilita One', cursive;
+  color: #1B2430;
+  font-size: 1.1rem;
+  text-transform: uppercase;
+}
+.bs-pseudo { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bs-logout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(180deg, #EF5350, #C62828);
+  border: 3px solid #1B2430;
+  border-radius: 10px;
+  color: white;
+  text-decoration: none;
+  font-size: 1.2rem;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.4);
+}
+
+/* ----- Bannière de saison ----- */
+.bs-season-banner {
+  background: linear-gradient(180deg, rgba(255,193,7,0.15), rgba(255,107,53,0.15));
+  padding: 10px 14px;
+  border-bottom: 3px solid rgba(255,193,7,0.4);
+}
+.bs-season-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  text-decoration: none;
+  color: white;
+}
+.bs-season-info {
+  display: flex;
+  flex-direction: column;
+  font-family: 'Lilita One', cursive;
+  font-size: 1rem;
+  color: #FFC107;
+  text-shadow: 1px 1px 0 rgba(0,0,0,0.5);
+  min-width: 120px;
+}
+.bs-season-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  max-width: 400px;
+}
+.bs-season-bar {
+  flex: 1;
+  height: 14px;
+  background: rgba(0,0,0,0.4);
+  border: 2px solid #1B2430;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.bs-season-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #FFC107, #FF6B35);
+  width: 0%;
+  transition: width 0.4s;
+}
+.bs-season-xp {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: white;
+  white-space: nowrap;
+}
+
+/* ----- Main content ----- */
+.bs-main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 14px;
+}
+.bs-section {
+  margin-bottom: 22px;
+}
+.bs-section-title {
+  font-family: 'Lilita One', cursive;
+  font-size: 1.4rem;
+  color: white;
+  text-shadow: 2px 2px 0 rgba(0,0,0,0.5);
+  margin-bottom: 10px;
+  padding-bottom: 4px;
+  border-bottom: 2px dashed rgba(255,255,255,0.3);
+}
+
+/* ----- Section Jouer (gros boutons colorés) ----- */
+.bs-play-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.bs-play-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 18px 12px;
+  border: 4px solid #1B2430;
+  border-radius: 18px;
+  border-bottom-width: 7px;
+  cursor: pointer;
+  font-family: 'Lilita One', cursive;
+  color: #1B2430;
+  text-decoration: none;
+  text-align: center;
+  box-shadow: 0 4px 0 rgba(0,0,0,0.3);
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+.bs-play-btn:hover { filter: brightness(1.06); }
+.bs-play-btn:active {
+  transform: translateY(3px);
+  border-bottom-width: 4px;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.3);
+}
+.bs-play-primary { background: linear-gradient(180deg, #FFC107, #FF6B35); }
+.bs-play-blue { background: linear-gradient(180deg, #4FC3F7, #1976D2); color: white; }
+.bs-play-violet { background: linear-gradient(180deg, #BA68C8, #6A1B9A); color: white; }
+.bs-play-orange { background: linear-gradient(180deg, #FFB74D, #F57C00); }
+.bs-play-icon { font-size: 2.2rem; margin-bottom: 6px; }
+.bs-play-label { font-size: 1.15rem; letter-spacing: 0.5px; }
+.bs-play-sub { font-size: 0.8rem; opacity: 0.85; margin-top: 2px; font-family: 'Nunito', sans-serif; font-weight: 800; }
+
+/* ----- Section Shop / Pass (cards horizontales) ----- */
+.bs-cards-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+.bs-card-link { text-decoration: none; color: inherit; }
+.bs-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 18px 12px;
+  background: rgba(255,255,255,0.96);
+  border: 4px solid #1B2430;
+  border-radius: 18px;
+  border-bottom-width: 7px;
+  box-shadow: 0 4px 0 rgba(0,0,0,0.3);
+  transition: transform 0.08s;
+  text-align: center;
+}
+.bs-card:hover { transform: translateY(-3px); }
+.bs-card-icon { font-size: 2.4rem; margin-bottom: 6px; }
+.bs-card-label { font-family: 'Lilita One', cursive; font-size: 1.1rem; color: #1B2430; }
+.bs-card-sub { font-size: 0.8rem; color: #555; margin-top: 2px; }
+.bs-card-pass { background: linear-gradient(180deg, #fff, #ffe8a3); border-color: #FF6B35; }
+.bs-card-shop { background: linear-gradient(180deg, #fff, #d6f5e0); border-color: #06D6A0; }
+.bs-card-leader { background: linear-gradient(180deg, #fff, #ffe0b3); border-color: #FFC107; }
+
+/* ----- Section Stats ----- */
+.bs-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.bs-stat {
+  background: rgba(255,255,255,0.96);
+  border: 3px solid #1B2430;
+  border-radius: 14px;
+  padding: 14px;
+  text-align: center;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.25);
+}
+.bs-stat-value {
+  font-family: 'Lilita One', cursive;
+  font-size: 1.8rem;
+  color: #FF6B35;
+}
+.bs-stat-label {
+  font-size: 0.85rem;
+  color: #555;
+  font-weight: 800;
+  margin-top: 2px;
+}
+
+.bs-inventory-mini {
+  background: rgba(255,255,255,0.96);
+  border: 3px solid #1B2430;
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+.bs-inv-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.bs-inv-tile {
+  background: linear-gradient(180deg, #fff, #f0f0f0);
+  border: 3px solid #1B2430;
+  border-radius: 12px;
+  padding: 8px;
+  text-align: center;
+}
+.bs-inv-tile .icon { font-size: 1.6rem; }
+.bs-inv-tile .qte { font-family: 'Lilita One', cursive; font-size: 1.3rem; color: #FF6B35; }
+.bs-inv-tile .lbl { font-size: 0.75rem; color: #555; font-weight: 800; }
+
+/* ----- Bottom navigation (style Brawl Stars) ----- */
+.bs-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  display: flex;
+  justify-content: space-around;
+  background: linear-gradient(180deg, rgba(0,0,0,0.85), rgba(0,0,0,0.95));
+  backdrop-filter: blur(10px);
+  border-top: 3px solid rgba(255,193,7,0.5);
+  padding: 6px 4px;
+  padding-bottom: max(6px, env(safe-area-inset-bottom));
+}
+.bs-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 10px;
+  color: rgba(255,255,255,0.7);
+  text-decoration: none;
+  font-weight: 800;
+  font-size: 0.7rem;
+  border-radius: 10px;
+  transition: all 0.15s;
+  flex: 1;
+  max-width: 100px;
+}
+.bs-nav-item:hover { color: white; background: rgba(255,255,255,0.08); }
+.bs-nav-item.active {
+  color: #FFC107;
+  background: rgba(255,193,7,0.15);
+  transform: translateY(-2px);
+}
+.bs-nav-icon { font-size: 1.4rem; }
+.bs-nav-label { font-size: 0.7rem; }
+
+/* ----- Mobile ----- */
+@media (max-width: 720px) {
+  .bs-res { font-size: 0.8rem; padding: 4px 8px; }
+  .bs-pseudo { max-width: 80px; }
+  .bs-avatar-btn { padding: 3px 8px 3px 3px; font-size: 0.85rem; }
+  .bs-avatar { width: 28px; height: 28px; font-size: 0.95rem; }
+  .bs-pass-badge { padding: 4px 8px; font-size: 0.75rem; }
+  .bs-res-btn { padding: 4px 8px; font-size: 0.75rem; }
+  .bs-section-title { font-size: 1.15rem; }
+  .bs-play-icon { font-size: 1.8rem; }
+  .bs-play-label { font-size: 1rem; }
+  .bs-play-sub { font-size: 0.7rem; }
+  .bs-season-info { font-size: 0.85rem; min-width: 90px; }
+  .bs-season-xp { font-size: 0.75rem; }
+  .bs-nav-label { font-size: 0.65rem; }
+  .bs-nav-icon { font-size: 1.2rem; }
+  .bs-stat-value { font-size: 1.4rem; }
+}
+@media (max-width: 480px) {
+  .bs-resources { gap: 4px; }
+  .bs-res { font-size: 0.75rem; padding: 3px 6px; }
+  .bs-play-grid { grid-template-columns: 1fr 1fr; }
+  .bs-cards-row { grid-template-columns: 1fr 1fr; }
+  .bs-pseudo { display: none; }
+  .bs-avatar-btn { padding: 3px; }
+  .bs-res-btn { padding: 3px 6px; font-size: 0.7rem; }
+  .bs-pass-badge { padding: 3px 6px; font-size: 0.7rem; }
+  .bs-pass-text { display: none; }
+}
+
 /* ---------- Mobile ---------- */
 @media (max-width: 540px) {
   .profile { grid-template-columns: 1fr; text-align: center; }

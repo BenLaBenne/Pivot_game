@@ -40,6 +40,8 @@
         </div>
       </div>
     </div>
+    <!-- Barre de progression vers le prochain rang -->
+    <div id="rank-progress" class="rank-progress mt-2"></div>
   </div>
 
   <!-- Actions principales -->
@@ -114,19 +116,62 @@ function renderProfile(u) {
   if (navAdmin) {
     const level = u.admin_level || (u.is_admin ? 1 : 0);
     navAdmin.style.display = level >= 1 ? 'inline-block' : 'none';
-    // Modifier le label selon le niveau
     if (level === 2) navAdmin.textContent = '👑 Admin';
     else if (level === 1) navAdmin.textContent = '🛡️ Modo';
   }
-  // Rank
+  // Barre de progression vers le prochain rang
+  renderRankProgress(u.trophies);
+  // Rank (récupéré via fetchMe)
   const rankEl = document.getElementById('rank');
-  fetch('/api/leaderboard/user/' + encodeURIComponent(u.pseudo))
-    .then(r => r.json())
-    .then(d => {
-      const tierName = guessRank(d.user.trophies);
-      rankEl.textContent = tierName;
-    })
-    .catch(() => rankEl.textContent = '—');
+  rankEl.textContent = guessRank(u.trophies);
+}
+
+// Affiche la barre de progression "TR actuel / TR prochain rang"
+function renderRankProgress(tr) {
+  const el = document.getElementById('rank-progress');
+  if (!el) return;
+  const R = [
+    [0,'Plastique 1'],[50,'Plastique 2'],[100,'Plastique 3'],
+    [150,'Bronze 1'],[250,'Bronze 2'],[350,'Bronze 3'],
+    [500,'Argent 1'],[650,'Argent 2'],[800,'Argent 3'],
+    [1000,'Fer 1'],[1200,'Fer 2'],[1400,'Fer 3'],
+    [1700,'Or 1'],[2000,'Or 2'],[2300,'Or 3'],
+    [2700,'Legendary 1'],[3100,'Legendary 2'],[3500,'Legendary 3']
+  ];
+  // Trouver rang actuel et prochain rang
+  let idx = 0;
+  for (let i = 0; i < R.length; i++) {
+    if (tr >= R[i][0]) idx = i;
+  }
+  const currentName = R[idx][1];
+  const currentTr = R[idx][0];
+  // Si on est au dernier rang, pas de prochain
+  if (idx === R.length - 1) {
+    el.innerHTML = `
+      <div style="text-align:center;padding:10px 14px;background:linear-gradient(180deg,#FFD700,#B8860B);border:3px solid #1B2430;border-radius:12px;color:#1B2430;font-weight:900;">
+        👑 Rang maximal atteint : ${currentName} (${tr} TR)
+      </div>`;
+    return;
+  }
+  const nextName = R[idx + 1][1];
+  const nextTr = R[idx + 1][0];
+  const trNeeded = nextTr - tr;  // TR restant à gagner
+  const trInRange = tr - currentTr;
+  const trRange = nextTr - currentTr;
+  const pct = Math.max(0, Math.min(100, Math.round(100 * trInRange / trRange)));
+  el.innerHTML = `
+    <div style="margin-bottom:6px;display:flex;justify-content:space-between;font-weight:800;">
+      <span>${currentName}</span>
+      <span style="opacity:0.7;">${tr} TR</span>
+      <span>${nextName}</span>
+    </div>
+    <div style="background:#eee;border:3px solid #1B2430;border-radius:12px;height:22px;overflow:hidden;">
+      <div style="background:linear-gradient(90deg,#FFC107,#FF6B35);height:100%;width:${pct}%;transition:width 0.4s;"></div>
+    </div>
+    <div style="text-align:center;margin-top:6px;font-size:0.9rem;color:var(--bleu-fonce);font-weight:800;">
+      ${trNeeded} TR restants pour atteindre <strong>${nextName}</strong>
+      <span class="muted" style="font-weight:normal;">(environ ${Math.ceil(trNeeded / 25)} victoires ranked)</span>
+    </div>`;
 }
 
 // Approximation locale du rang

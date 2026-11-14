@@ -73,6 +73,10 @@ app.get('/api/health', (req, res) => res.json({
   dbError: dbError ? 'Erreur: ' + dbError : null
 }));
 
+// Fallback: si le client a perdu la connexion socket mais a encore un token,
+// il peut au moins vérifier qu'il est vivant.
+app.get('/api/ping', (req, res) => res.json({ ok: true, ts: Date.now() }));
+
 // Redirections pratiques vers les pages HTML
 const pagesMap = {
   '/': 'index.html',

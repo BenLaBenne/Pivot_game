@@ -136,7 +136,32 @@ PIVOT.initRoom = function(code) {
 
 // ==== Bind socket events ====
 PIVOT.bindSocket = function(sock) {
+  // Sync automatique à la (re)connexion du socket
+  sock.on('connect', () => {
+    console.log('[client] socket connecté, sync auto.');
+    if (!PIVOT._endScreenShown) {
+      sock.emit('match.sync');
+    }
+  });
+  sock.on('reconnect', () => {
+    console.log('[client] socket reconnecté, sync auto.');
+    if (!PIVOT._endScreenShown) {
+      sock.emit('match.sync');
+    }
+  });
+
+  // Sync périodique pendant une partie (toutes les 15s, au cas où)
+  clearInterval(PIVOT._syncInterval);
+  PIVOT._syncInterval = setInterval(() => {
+    if (etat && !etat.gagnant && !PIVOT._endScreenShown) {
+      sock.emit('match.sync');
+    }
+  }, 15000);
+
   sock.on('match.update', (data) => {
+    // Annuler le watchdog du coup : on a bien reçu une réponse
+    PIVOT._annulerWatchdogCoup();
+
     // Détection du son à jouer : si c'est mon tour qui vient de revenir, c'est que l'adversaire a joué
     if (etat && data && !etat.gagnant) {
       const ancienTour = etat.tour;
@@ -174,12 +199,23 @@ PIVOT.bindSocket = function(sock) {
   });
   sock.on('match.end', (data) => {
     clearTimeout(PIVOT._endWatchdog);
+    PIVOT._annulerWatchdogCoup();
     PIVOT._endScreenShown = true;
     PIVOT.renderFin(data);
   });
   sock.on('match.error', (data) => {
     PIVOT.sounds && PIVOT.sounds.play('error');
     PIVOT.toast(data.error, 'error');
+    // Si on nous dit "Partie déjà terminée", c'est qu'on a raté le match.end.
+    // Déclencher un sync immédiat pour récupérer l'état final.
+    if (data.error && data.error.includes('déjà terminée')) {
+      console.warn('[client] "Partie déjà terminée" reçue — demande sync immédiat.');
+      PIVOT._annulerWatchdogCoup();
+      setTimeout(() => {
+        const s = PIVOT._socket;
+        if (s) s.emit('match.sync');
+      }, 200);
+    }
   });
   sock.on('match.quit-notify', (data) => {
     // L'adversaire a quitté: message + on va recevoir match.end ensuite
@@ -446,6 +482,12 @@ PIVOT.cliquerCible = function(x, y) {
   if (!sock) return;
   const cote = role;
 
+  // WATCHDOG : si on ne reçoit pas de match.update / match.end dans les 4s
+  // après avoir envoyé un coup, on demande au serveur l'état actuel (match.sync).
+  // Cela résout le bug "aucun écran de fin ne s'affiche" même si les events
+  // sont perdus par socket.io.
+  PIVOT._demarrerWatchdogCoup();
+
   // Cas TP en attente
   if (etat.enTp) {
     let depType = mode;
@@ -470,6 +512,28 @@ PIVOT.cliquerCible = function(x, y) {
   PIVOT.sounds && PIVOT.sounds.play(mode === 'virage' ? 'virage' : (mode === 'diagonale' ? 'diagonale' : 'move'));
   // Revenir en mode Glisser après envoi du coup (sera reaffiné si le serveur confirme)
   mode = 'glisser';
+};
+
+// Watchdog après chaque coup envoyé
+PIVOT._demarrerWatchdogCoup = function() {
+  clearTimeout(PIVOT._watchdogCoup);
+  PIVOT._watchdogCoup = setTimeout(() => {
+    console.warn('[client] Watchdog: aucune réponse au coup après 4s, demande sync.');
+    const sock = PIVOT._socket;
+    if (sock) sock.emit('match.sync');
+    // Si le sync aussi ne donne rien dans 3s, retry
+    PIVOT._watchdogSync = setTimeout(() => {
+      if (!PIVOT._endScreenShown) {
+        console.warn('[client] Watchdog: sync sans réponse, retry.');
+        if (sock) sock.emit('match.sync');
+      }
+    }, 3000);
+  }, 4000);
+};
+
+PIVOT._annulerWatchdogCoup = function() {
+  clearTimeout(PIVOT._watchdogCoup);
+  clearTimeout(PIVOT._watchdogSync);
 };
 
 PIVOT.envoyerEchange = function(garder) {

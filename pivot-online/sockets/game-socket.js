@@ -410,6 +410,47 @@ function register(io) {
       await finirMatch(io, matchId);
     });
 
+    // === Sync : le client demande l'état actuel du match ===
+    // Permet de récupérer l'état si on a raté un match.update / match.end.
+    socket.on('match.sync', async () => {
+      const matchId = socketToMatch.get(socket.id);
+      if (!matchId) return socket.emit('match.error', { error: 'Aucune partie en cours.' });
+      const m = matchsEnCours.get(matchId);
+      if (!m) return socket.emit('match.error', { error: 'Partie introuvable.' });
+
+      // Vérifier que le socket est bien dans ce match
+      if (m.p1Id !== socket.userId && m.p2Id !== socket.userId) {
+        return socket.emit('match.error', { error: 'Vous n\'êtes pas dans cette partie.' });
+      }
+
+      // Renvoyer l'état public actuel
+      socket.emit('match.update', state.vuePublique(m.etat));
+
+      // Si la partie est déjà finie mais que le client n'a pas reçu match.end,
+      // lui renvoyer un match.end minimal (sans récompenses — déjà créditées).
+      if (m.etat.gagnant) {
+        const cote = (m.p1Id === socket.userId) ? 'R' : 'B';
+        const gagnant = m.p1Id === m.p1Id ? 'R' : 'B'; // = m.etat.gagnant
+        const won = (m.etat.gagnant === cote);
+        const invFinal = await chargerInventaire(socket.userId);
+        const advId = (m.p1Id === socket.userId) ? m.p2Id : m.p1Id;
+        const invAdvFinal = await chargerInventaire(advId);
+        socket.emit('match.end', {
+          winner: m.etat.gagnant,
+          pc: 0, tr: 0, eloDelta: 0,
+          forfait: !!m.forfait,
+          quit: !!m.quit,
+          montees: [],
+          inventaireMoi: invFinal,
+          inventaireAdversaire: invAdvFinal,
+          sync: true  // indique au client que c'est un sync (récompenses déjà créditées)
+        });
+        console.log(`[socket] match.sync pour ${socket.pseudo}: partie déjà finie, match.end renvoyé.`);
+      } else {
+        console.log(`[socket] match.sync pour ${socket.pseudo}: partie en cours, état renvoyé.`);
+      }
+    });
+
     // === Déconnexion ===
     socket.on('disconnect', async () => {
       console.log(`[socket] Déconnexion de ${socket.pseudo} (${socket.userId}).`);

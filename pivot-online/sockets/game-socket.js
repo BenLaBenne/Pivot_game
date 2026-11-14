@@ -429,14 +429,15 @@ function register(io) {
       // Si la partie est déjà finie mais que le client n'a pas reçu match.end,
       // lui renvoyer un match.end minimal (sans récompenses — déjà créditées).
       if (m.etat.gagnant) {
-        const cote = (m.p1Id === socket.userId) ? 'R' : 'B';
-        const gagnant = m.p1Id === m.p1Id ? 'R' : 'B'; // = m.etat.gagnant
-        const won = (m.etat.gagnant === cote);
+        const gagnantIdSync = m.etat.ids[m.etat.gagnant];
+        const perdantIdSync = m.etat.ids[(m.etat.gagnant === 'R') ? 'B' : 'R'];
         const invFinal = await chargerInventaire(socket.userId);
         const advId = (m.p1Id === socket.userId) ? m.p2Id : m.p1Id;
         const invAdvFinal = await chargerInventaire(advId);
         socket.emit('match.end', {
           winner: m.etat.gagnant,
+          gagnantId: gagnantIdSync,
+          perdantId: perdantIdSync,
           pc: 0, tr: 0, eloDelta: 0,
           forfait: !!m.forfait,
           quit: !!m.quit,
@@ -635,6 +636,8 @@ async function finirMatch(io, matchId) {
   // Recaps par défaut (en cas d'erreur DB)
   let recapGagnant = {
     winner: e.gagnant,
+    gagnantId: gagnantId,
+    perdantId: perdantId,
     pc: 0, tr: 0, eloDelta: 0,
     forfait: !!m.forfait,
     quit: !!m.quit,
@@ -644,6 +647,8 @@ async function finirMatch(io, matchId) {
   };
   let recapPerdant = {
     winner: e.gagnant,
+    gagnantId: gagnantId,
+    perdantId: perdantId,
     pc: 0, tr: 0, eloDelta: 0,
     forfait: !!m.forfait,
     quit: !!m.quit,
@@ -667,7 +672,10 @@ async function finirMatch(io, matchId) {
       throw new Error('Un des joueurs est introuvable en DB.');
     }
     eloP1 = eR.rows[0].elo; eloP2 = eB.rows[0].elo;
-    const scoreP1 = (e.gagnant === 'R') ? 1 : 0;
+    // BUG FIX : utiliser gagnantId === m.p1Id (pas e.gagnant === 'R') car après un
+    // échange des camps, e.ids.R et e.ids.B sont swappés — 'R' ne correspond plus
+    // forcément au joueur 1.
+    const scoreP1 = (gagnantId === m.p1Id) ? 1 : 0;
     ({ newA, newB, deltaA, deltaB } = appliquerElo(eloP1, eloP2, scoreP1));
 
     let pcGagnant, trGagnant;
@@ -747,8 +755,12 @@ async function finirMatch(io, matchId) {
     } catch (e3) { /* on garde les inventaires pré-chargés */ }
 
     // Construire les recaps avec les vraies valeurs
+    // On inclut gagnantId et perdantId pour que le client puisse déterminer won
+    // de façon robuste (pas basée sur role qui devient faux après échange des camps).
     recapGagnant = {
       winner: e.gagnant,
+      gagnantId: gagnantId,
+      perdantId: perdantId,
       pc: pcGagnantFinal, tr: trGagnant, eloDelta: (gagnantId === m.p1Id ? deltaA : deltaB),
       forfait: !!m.forfait, quit: !!m.quit, montees,
       inventaireMoi: gagnantId === m.p1Id ? invP1Final : invP2Final,
@@ -756,6 +768,8 @@ async function finirMatch(io, matchId) {
     };
     recapPerdant = {
       winner: e.gagnant,
+      gagnantId: gagnantId,
+      perdantId: perdantId,
       pc: pcPerdant, tr: trPerdant, eloDelta: (perdantId === m.p1Id ? deltaA : deltaB),
       forfait: !!m.forfait, quit: !!m.quit,
       inventaireMoi: perdantId === m.p1Id ? invP1Final : invP2Final,

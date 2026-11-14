@@ -563,10 +563,22 @@ PIVOT.renderFin = function(data) {
   PIVOT._endScreenShown = true;
   clearTimeout(PIVOT._endWatchdog);
 
-  // BUG FIX : utiliser data.winner (envoyé par le serveur) plutôt que etat.gagnant
-  // car match.end arrive AVANT le match.update qui mettrait à jour etat.gagnant.
-  const gagnantCote = data.winner || (etat && etat.gagnant) || null;
-  const won = (gagnantCote === role);
+  // BUG FIX : utiliser data.gagnantId (l'ID utilisateur du gagnant) pour déterminer
+  // si on a gagné, plutôt que data.winner === role. Après un échange des camps,
+  // role n'est plus fiable (le client ne met pas à jour role après l'échange),
+  // donc data.winner === role donne un résultat inversé.
+  // On compare data.gagnantId avec notre propre userId (de PIVOT.getUser()).
+  const me = PIVOT.getUser();
+  const myId = me && me.id;
+  let won;
+  if (data.gagnantId != null && myId != null) {
+    // Méthode robuste : comparer les IDs utilisateur
+    won = (data.gagnantId === myId);
+  } else {
+    // Fallback : ancienne méthode (peut être fausse après échange)
+    const gagnantCote = data.winner || (etat && etat.gagnant) || null;
+    won = (gagnantCote === role);
+  }
 
   // Son de fin
   if (won) {

@@ -2,23 +2,24 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>PIVOT Online — Pass de Combat</title>
 <link rel="stylesheet" href="/css/style.css">
 </head>
-<body>
-<div class="app-shell">
-  <div class="topbar">
-    <a href="/" class="logo">PIVOT</a>
-    <nav>
-      <a href="/play">Jouer</a>
-      <a href="/tournaments">Tournois</a>
-      <a href="/shop">Boutique</a>
-      <a href="/leaderboard">Classement</a>
-      <a href="/pass" style="color:var(--jaune);">Pass</a>
-      <a href="/" id="btn-home">← Accueil</a>
-    </nav>
+<body class="page-home">
+
+<!-- ===== Top bar identique à l'accueil ===== -->
+<header class="bs-topbar">
+  <div class="bs-resources">
+    <a href="/" class="bs-res" style="text-decoration:none;color:inherit;">← Retour</a>
   </div>
+  <div class="bs-profile">
+    <a href="/" class="bs-pass-badge" title="Accueil">🏠</a>
+    <a href="/leaderboard" class="bs-res-btn"><span class="icon">🏆</span> Top</a>
+  </div>
+</header>
+
+<main class="bs-main">
 
   <!-- En-tête du pass -->
   <div class="card" id="pass-header">
@@ -34,6 +35,10 @@
       </div>
       <p class="muted mt-1" id="pass-next-info">Prochain niveau : 100 XP</p>
     </div>
+    <!-- Bouton "Tout réclamer" -->
+    <div class="row mt-2">
+      <button class="btn btn-vert btn-large" id="btn-claim-all">🎁 Tout réclamer (<span id="unclaimed-count">0</span>)</button>
+    </div>
   </div>
 
   <!-- Info XP -->
@@ -44,13 +49,13 @@
       <div class="stat-box"><div class="value" style="color:var(--rouge);">+3</div><div class="label">Par défaite</div></div>
       <div class="stat-box"><div class="value" style="color:var(--orange);">+5</div><div class="label">Par coup joué</div></div>
     </div>
-    <p class="muted mt-2">100 XP par niveau. 30 niveaux par saison.</p>
+    <p class="muted mt-2">100 XP par niveau. 30 niveaux par saison. Clique sur une case débloquée pour réclamer sa récompense !</p>
   </div>
 
   <!-- Track des récompenses -->
   <div class="card">
     <h3 style="color:var(--bleu-fonce);">🎁 Récompenses</h3>
-    <p class="muted mb-2">Les récompenses sont <strong>automatiquement créditées</strong> quand tu atteins un nouveau niveau.</p>
+    <p class="muted mb-2">Clique sur une case <strong>débloquée</strong> pour réclamer la récompense.</p>
     <div id="rewards-track" class="rewards-track">Chargement...</div>
   </div>
 
@@ -63,7 +68,7 @@
   <div class="card">
     <p class="muted">À la fin de chaque mois (saison), tous les comptes retournent à Plastique 1 (TR remis à 0) et le pass est reset. Le Pass de Combat est purement cosmétique : aucune récompense ne donne d'avantage en jeu.</p>
   </div>
-</div>
+</main>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/api.js"></script>
@@ -96,15 +101,34 @@ async function charger() {
       document.getElementById('pass-progress-fill').style.width = p.pct + '%';
     }
 
+    // Bouton "Tout réclamer"
+    document.getElementById('unclaimed-count').textContent = p.unclaimedCount;
+    document.getElementById('btn-claim-all').disabled = (p.unclaimedCount === 0);
+    document.getElementById('btn-claim-all').onclick = claimAll;
+
     // Track des récompenses
     const track = document.getElementById('rewards-track');
     track.innerHTML = r.rewards.map(rw => {
-      const isCurrent = rw.current;
-      const isUnlocked = rw.unlocked;
-      const cls = isUnlocked ? 'reward-box unlocked' : (isCurrent ? 'reward-box current' : 'reward-box locked');
-      const statusIcon = isUnlocked ? '✅' : (isCurrent ? '▶️' : '🔒');
+      let cls = 'reward-box locked';
+      let statusIcon = '🔒';
+      let onclick = '';
+      let badge = '';
+      if (rw.claimed) {
+        cls = 'reward-box unlocked';
+        statusIcon = '✅';
+      } else if (rw.unlocked) {
+        // Débloqué mais pas réclamé → cliquable avec badge rouge
+        cls = 'reward-box claimable';
+        statusIcon = '🎁';
+        onclick = `onclick="claimReward(${rw.level})"`;
+        badge = `<div class="reward-badge">!</div>`;
+      } else if (rw.current) {
+        cls = 'reward-box current';
+        statusIcon = '▶️';
+      }
       return `
-        <div class="${cls}">
+        <div class="${cls}" ${onclick} data-level="${rw.level}">
+          ${badge}
           <div class="reward-level">Niv. ${rw.level}</div>
           <div class="reward-icon-big">${escapeHtml(rw.icon)}</div>
           <div class="reward-status">${statusIcon}</div>
@@ -125,6 +149,59 @@ async function charger() {
   } catch (e) {
     PIVOT.toast(e.message, 'error');
     document.getElementById('season-info').textContent = 'Erreur de chargement.';
+  }
+}
+
+async function claimReward(level) {
+  try {
+    const r = await PIVOT.api('POST', '/pass/claim', { level });
+    if (r.alreadyClaimed) {
+      PIVOT.toast('Déjà réclamée.', 'error');
+    } else {
+      PIVOT.toast(`Récompense niv.${level} réclamée : ${r.recap} !`);
+      // Confettis pour célébrer
+      lancerConfettis();
+      // Recharger pour mettre à jour l'affichage
+      charger();
+    }
+  } catch (e) {
+    PIVOT.toast(e.message, 'error');
+  }
+}
+
+async function claimAll() {
+  try {
+    const r = await PIVOT.api('POST', '/pass/claim-all', {});
+    if (r.claimed > 0) {
+      PIVOT.toast(`${r.claimed} récompense(s) réclamée(s) !`);
+      lancerConfettis();
+      charger();
+    } else {
+      PIVOT.toast('Aucune récompense à réclamer.');
+    }
+  } catch (e) {
+    PIVOT.toast(e.message, 'error');
+  }
+}
+
+function lancerConfettis() {
+  if (!PIVOT.lancerConfettis) {
+    // Fallback local si PIVOT.lancerConfettis n'existe pas
+    const cont = document.createElement('div');
+    cont.className = 'confetti-container';
+    document.body.appendChild(cont);
+    const colors = ['#FFC107', '#FF6B35', '#06D6A0', '#9B5DE5', '#E63946', '#5BC0EB'];
+    for (let i = 0; i < 80; i++) {
+      const p = document.createElement('div');
+      p.className = 'confetti-piece';
+      p.style.left = Math.random() * 100 + 'vw';
+      p.style.background = colors[Math.floor(Math.random() * colors.length)];
+      p.style.animationDelay = (Math.random() * 0.5) + 's';
+      cont.appendChild(p);
+    }
+    setTimeout(() => cont.remove(), 3500);
+  } else {
+    PIVOT.lancerConfettis();
   }
 }
 

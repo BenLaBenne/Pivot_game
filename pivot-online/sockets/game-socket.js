@@ -759,8 +759,8 @@ async function finirMatch(io, matchId) {
 
     // ===== Pass de Combat : calculer XP et level-ups pour les deux joueurs =====
     let xpGagnant = 0, xpPerdant = 0;
-    let passGagnant = { xpGagne: 0, newXp: 0, newLevel: 0, levelsGained: 0, rewards: [] };
-    let passPerdant = { xpGagne: 0, newXp: 0, newLevel: 0, levelsGained: 0, rewards: [] };
+    let passGagnant = { xpGagne: 0, newXp: 0, newLevel: 0, levelsGained: 0, unlockedLevels: [] };
+    let passPerdant = { xpGagne: 0, newXp: 0, newLevel: 0, levelsGained: 0, unlockedLevels: [] };
     try {
       const coupsGagnant = (e.coupsParJoueur && e.coupsParJoueur[e.gagnant]) || 0;
       const coupsPerdant = (e.coupsParJoueur && e.coupsParJoueur[(e.gagnant === 'R') ? 'B' : 'R']) || 0;
@@ -790,44 +790,31 @@ async function finirMatch(io, matchId) {
         await pool.query('UPDATE users SET pass_xp = $1, pass_level = $2 WHERE id = $3',
           [resP.newXp, resP.newLevel, perdantId]);
 
-        // Créditer les récompenses des nouveaux niveaux (gagnant)
-        let recompRecapG = [];
-        for (const reward of resG.newRewards) {
-          try {
-            const recap = await appliquerRecompense(gagnantId, reward);
-            console.log(`[pass] Récompense gagnant niv.${reward.level} créditée: ${recap}`);
-            if (recap) recompRecapG.push(recap);
-          } catch (eR) { console.error('[pass] crédit reward gagnant:', eR.message); }
-        }
-        let recompRecapP = [];
-        for (const reward of resP.newRewards) {
-          try {
-            const recap = await appliquerRecompense(perdantId, reward);
-            console.log(`[pass] Récompense perdant niv.${reward.level} créditée: ${recap}`);
-            if (recap) recompRecapP.push(recap);
-          } catch (eR) { console.error('[pass] crédit reward perdant:', eR.message); }
-        }
+        // IMPORTANT : On NE crédite PAS les récompenses ici. Les niveaux sont
+        // débloqués mais le joueur doit cliquer sur la case dans la page Pass
+        // pour réclamer la récompense (route POST /api/pass/claim).
+        // On envoie juste la liste des niveaux débloqués dans le recap.
 
         passGagnant = {
           xpGagne: xpGagnant,
           newXp: resG.newXp,
           newLevel: resG.newLevel,
           levelsGained: resG.levelsGained,
-          rewards: recompRecapG
+          unlockedLevels: resG.newRewards.map(r => r.level)  // niveaux débloqués (à claim)
         };
         passPerdant = {
           xpGagne: xpPerdant,
           newXp: resP.newXp,
           newLevel: resP.newLevel,
           levelsGained: resP.levelsGained,
-          rewards: recompRecapP
+          unlockedLevels: resP.newRewards.map(r => r.level)
         };
 
         if (resG.levelsGained > 0) {
-          console.log(`[pass] ${gagnantId}: +${xpGagnant} XP, ${resG.levelsGained} niveau(x) gagné(s) → niveau ${resG.newLevel}.`);
+          console.log(`[pass] ${gagnantId}: +${xpGagnant} XP, ${resG.levelsGained} niveau(x) débloqué(s) → niveau ${resG.newLevel}. Récompenses à claim: ${resG.newRewards.map(r => r.level).join(', ')}`);
         }
         if (resP.levelsGained > 0) {
-          console.log(`[pass] ${perdantId}: +${xpPerdant} XP, ${resP.levelsGained} niveau(x) gagné(s) → niveau ${resP.newLevel}.`);
+          console.log(`[pass] ${perdantId}: +${xpPerdant} XP, ${resP.levelsGained} niveau(x) débloqué(s) → niveau ${resP.newLevel}. Récompenses à claim: ${resP.newRewards.map(r => r.level).join(', ')}`);
         }
       }
     } catch (eX) {

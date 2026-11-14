@@ -629,11 +629,8 @@ PIVOT.renderFin = function(data) {
     if (data.pass.levelsGained > 0) {
       recH += '<div class="pass-levelup-block">';
       recH += `<div class="pass-levelup-title">🎫 PASS NIVEAU ${data.pass.newLevel} ! (+${data.pass.levelsGained})</div>`;
-      if (data.pass.rewards && data.pass.rewards.length) {
-        for (const r of data.pass.rewards) {
-          recH += `<div class="pass-levelup-line">🎁 ${escapeHtml(r)}</div>`;
-        }
-      }
+      recH += `<div class="pass-levelup-line">Niveaux débloqués : ${data.pass.unlockedLevels ? data.pass.unlockedLevels.join(', ') : ''}</div>`;
+      recH += `<div class="pass-levelup-line muted">Va sur la page Pass pour réclamer tes récompenses ! 🎁</div>`;
       recH += '</div>';
     }
   }

@@ -187,6 +187,19 @@ CREATE TABLE IF NOT EXISTS user_season_history (
   created_at TIMESTAMP DEFAULT NOW(),
   PRIMARY KEY (user_id, season_id)
 );
+
+-- ===== Récompenses de Pass réclamées (claim) =====
+-- Quand un joueur atteint un niveau, la récompense est "débloquée" mais
+-- pas encore créditée. Le joueur doit cliquer sur la case pour la réclamer.
+-- On track ici quelles récompenses ont déjà été réclamées.
+CREATE TABLE IF NOT EXISTS pass_claims (
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  season_id INTEGER REFERENCES seasons(id) ON DELETE CASCADE,
+  level INTEGER NOT NULL,
+  claimed_at TIMESTAMP DEFAULT NOW(),
+  PRIMARY KEY (user_id, season_id, level)
+);
+CREATE INDEX IF NOT EXISTS idx_passclaims_user ON pass_claims(user_id);
 `;
 
 async function initDb() {

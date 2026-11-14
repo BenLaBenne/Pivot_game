@@ -734,6 +734,41 @@ h3 { font-size: 1.2rem; }
   opacity: 0.55;
   filter: grayscale(0.3);
 }
+.reward-box.claimable {
+  background: linear-gradient(180deg, #fff, #ffe8a3);
+  border-color: #FFC107;
+  box-shadow: 0 4px 0 #FF6B35;
+  cursor: pointer;
+  animation: pulse-claimable 1.4s ease-in-out infinite;
+}
+@keyframes pulse-claimable {
+  0%, 100% { transform: translateY(0); box-shadow: 0 4px 0 #FF6B35; }
+  50% { transform: translateY(-3px); box-shadow: 0 7px 0 #FF6B35, 0 0 12px rgba(255,193,7,0.5); }
+}
+.reward-box.claimable:hover { transform: translateY(-4px) scale(1.05); }
+.reward-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #E63946;
+  color: white;
+  border: 2px solid #1B2430;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Lilita One', cursive;
+  font-size: 0.9rem;
+  font-weight: 900;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.4);
+  z-index: 5;
+  animation: badge-bounce 0.6s ease-in-out infinite alternate;
+}
+@keyframes badge-bounce {
+  to { transform: scale(1.1); }
+}
 .reward-level {
   font-family: 'Lilita One', cursive;
   font-size: 1rem;
@@ -848,6 +883,26 @@ body.page-home {
 }
 .bs-pass-badge:hover { transform: translateY(-2px); }
 .bs-pass-badge:active { transform: translateY(1px); }
+.bs-pass-notif {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #E63946;
+  color: white;
+  border: 2px solid #1B2430;
+  border-radius: 50%;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Lilita One', cursive;
+  font-size: 0.7rem;
+  font-weight: 900;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.4);
+  animation: badge-bounce 0.6s ease-in-out infinite alternate;
+}
 .bs-res-btn {
   display: inline-flex;
   align-items: center;
@@ -1121,6 +1176,7 @@ body.page-home {
   transition: all 0.15s;
   flex: 1;
   max-width: 100px;
+  position: relative;  /* pour le badge notif */
 }
 .bs-nav-item:hover { color: white; background: rgba(255,255,255,0.08); }
 .bs-nav-item.active {
@@ -1130,6 +1186,27 @@ body.page-home {
 }
 .bs-nav-icon { font-size: 1.4rem; }
 .bs-nav-label { font-size: 0.7rem; }
+.bs-nav-notif {
+  position: absolute;
+  top: 0;
+  right: 6px;
+  background: #E63946;
+  color: white;
+  border: 2px solid #1B2430;
+  border-radius: 50%;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Lilita One', cursive;
+  font-size: 0.65rem;
+  font-weight: 900;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.4);
+  animation: badge-bounce 0.6s ease-in-out infinite alternate;
+  z-index: 10;
+}
 
 /* ----- Mobile ----- */
 @media (max-width: 720px) {

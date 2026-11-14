@@ -19,6 +19,7 @@
     <a href="/pass" class="bs-pass-badge" id="bs-pass-badge" title="Pass de Combat">
       <span class="bs-pass-icon">🎫</span>
       <span class="bs-pass-text"><span id="bs-pass-level">0</span></span>
+      <span class="bs-pass-notif hidden" id="bs-pass-notif">0</span>
     </a>
     <a href="/leaderboard" class="bs-res-btn"><span class="icon">🏆</span> <span id="rank">…</span></a>
     <a href="/profile/me" class="bs-avatar-btn">
@@ -126,7 +127,7 @@
   <a href="/" class="bs-nav-item active"><span class="bs-nav-icon">🏠</span><span class="bs-nav-label">Accueil</span></a>
   <a href="/play" class="bs-nav-item"><span class="bs-nav-icon">⚔️</span><span class="bs-nav-label">Jouer</span></a>
   <a href="/shop" class="bs-nav-item"><span class="bs-nav-icon">🛒</span><span class="bs-nav-label">Shop</span></a>
-  <a href="/pass" class="bs-nav-item"><span class="bs-nav-icon">🎫</span><span class="bs-nav-label">Pass</span></a>
+  <a href="/pass" class="bs-nav-item bs-nav-has-notif-wrapper"><span class="bs-nav-icon">🎫</span><span class="bs-nav-label">Pass</span><span class="bs-nav-notif hidden" id="bs-nav-pass-notif">0</span></a>
   <a href="/leaderboard" class="bs-nav-item"><span class="bs-nav-icon">🏆</span><span class="bs-nav-label">Top</span></a>
   <a href="/profile/me" class="bs-nav-item"><span class="bs-nav-icon">👤</span><span class="bs-nav-label">Profil</span></a>
 </nav>
@@ -141,7 +142,7 @@ async function loadMe() {
     const u = r.user;
     PIVOT.setUser(u);
     renderProfile(u);
-    loadMiniPass();
+    loadPassBadge();
     loadSeasonBanner();
   } catch (e) {
     if (e.message.includes('Token')) {
@@ -172,16 +173,25 @@ function renderProfile(u) {
   // Lien profil
   document.querySelector('.bs-avatar-btn').href = '/profile/' + encodeURIComponent(u.pseudo);
   document.querySelector('.bs-nav-item[href="/profile/me"]').href = '/profile/' + encodeURIComponent(u.pseudo);
-  // Pass badge (top bar)
-  loadPassBadge();
 }
 
-// Charge juste le badge pass dans la top bar
+// Charge juste le badge pass dans la top bar + badge notif
 async function loadPassBadge() {
   try {
     const r = await PIVOT.api('GET', '/pass');
     document.getElementById('bs-pass-level').textContent = r.pass.level;
     document.getElementById('bs-card-pass-sub').textContent = `Niveau ${r.pass.level} / ${r.pass.totalLevels}`;
+    // Badge de notification (récompenses à réclamer)
+    const notifCount = r.pass.unclaimedCount || 0;
+    const notif1 = document.getElementById('bs-pass-notif');
+    const notif2 = document.getElementById('bs-nav-pass-notif');
+    if (notifCount > 0) {
+      if (notif1) { notif1.textContent = notifCount; notif1.classList.remove('hidden'); }
+      if (notif2) { notif2.textContent = notifCount; notif2.classList.remove('hidden'); }
+    } else {
+      if (notif1) notif1.classList.add('hidden');
+      if (notif2) notif2.classList.add('hidden');
+    }
   } catch (e) {}
 }
 

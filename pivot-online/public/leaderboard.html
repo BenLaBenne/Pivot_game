@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PIVOT Online — Classement</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <div class="topbar">
+    <a href="/" class="logo">PIVOT</a>
+    <nav>
+      <a href="/play">Jouer</a>
+      <a href="/tournaments">Tournois</a>
+      <a href="/shop">Boutique</a>
+      <a href="/leaderboard">Classement</a>
+      <a href="/" id="btn-home">← Accueil</a>
+    </nav>
+  </div>
+
+  <div class="card">
+    <h2 style="color:var(--bleu-fonce);">🏆 Classement</h2>
+    <p class="muted mb-2">Tous les joueurs, triés par Trophées (TR).</p>
+    <div class="row mb-2">
+      <label for="filter-tier" class="muted">Tier:</label>
+      <select id="filter-tier">
+        <option value="all">Tous</option>
+        <option value="Plastique">Plastique</option>
+        <option value="Bronze">Bronze</option>
+        <option value="Argent">Argent</option>
+        <option value="Fer">Fer</option>
+        <option value="Or">Or</option>
+        <option value="Legendary">Legendary</option>
+      </select>
+      <label for="filter-sort" class="muted">Tri:</label>
+      <select id="filter-sort">
+        <option value="tr">Par TR</option>
+        <option value="matches">Par parties</option>
+        <option value="winrate">Par win rate</option>
+      </select>
+      <button class="btn btn-mini" id="btn-filter">Appliquer</button>
+    </div>
+    <table class="leader-table" id="leader-table">
+      <thead>
+        <tr><th>#</th><th>Pseudo</th><th>Rank</th><th>TR</th><th>Elo</th><th>Parties</th><th>V/D</th><th>Win rate</th></tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="row mt-2">
+      <button class="btn btn-mini" id="btn-prev">← Page précédente</button>
+      <span id="page-info" class="muted flex-grow" style="text-align:center;">Page 1</span>
+      <button class="btn btn-mini" id="btn-next">Page suivante →</button>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/api.js"></script>
+<script>
+let page = 1;
+let pages = 1;
+let mePseudo = null;
+const user = PIVOT.getUser();
+if (user) mePseudo = user.pseudo;
+
+charger();
+
+async function charger() {
+  const tier = document.getElementById('filter-tier').value;
+  const sort = document.getElementById('filter-sort').value;
+  try {
+    const r = await PIVOT.api('GET', `/leaderboard?tier=${encodeURIComponent(tier)}&sort=${sort}&page=${page}`);
+    pages = r.pages || 1;
+    document.getElementById('page-info').textContent = `Page ${r.page} / ${pages}`;
+    const tbody = document.getElementById('tbody');
+    if (!r.joueurs || r.joueurs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" class="muted">Aucun joueur.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = r.joueurs.map((u, i) => {
+      const rank = guessRank(u.trophies);
+      const win = u.matches_played ? Math.round(100 * u.matches_won / u.matches_played) : 0;
+      const me = mePseudo === u.pseudo ? 'me' : '';
+      return `<tr class="${me}">
+        <td>${(page - 1) * 25 + i + 1}</td>
+        <td><a href="/profile/${encodeURIComponent(u.pseudo)}" style="color:inherit;text-decoration:none;font-weight:800;">${escapeHtml(u.pseudo)}</a></td>
+        <td>${rank}</td>
+        <td>${u.trophies}</td>
+        <td>${u.elo}</td>
+        <td>${u.matches_played}</td>
+        <td>${u.matches_won}/${u.matches_lost}</td>
+        <td>${win}%</td>
+      </tr>`;
+    }).join('');
+  } catch (e) { PIVOT.toast(e.message, 'error'); }
+}
+
+function guessRank(tr) {
+  const R = [[0,'Plastique 1'],[50,'Plastique 2'],[100,'Plastique 3'],[150,'Bronze 1'],[250,'Bronze 2'],[350,'Bronze 3'],
+    [500,'Argent 1'],[650,'Argent 2'],[800,'Argent 3'],[1000,'Fer 1'],[1200,'Fer 2'],[1400,'Fer 3'],
+    [1700,'Or 1'],[2000,'Or 2'],[2300,'Or 3'],[2700,'Legendary 1'],[3100,'Legendary 2'],[3500,'Legendary 3']];
+  let s = R[0][1]; for (const [t, n] of R) if (tr >= t) s = n; return s;
+}
+
+document.getElementById('btn-filter').addEventListener('click', () => { page = 1; charger(); });
+document.getElementById('btn-prev').addEventListener('click', () => { if (page > 1) { page--; charger(); } });
+document.getElementById('btn-next').addEventListener('click', () => { if (page < pages) { page++; charger(); } });
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+}
+</script>
+</body>
+</html>

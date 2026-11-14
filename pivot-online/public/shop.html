@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PIVOT Online — Boutique</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <div class="topbar">
+    <a href="/" class="logo">PIVOT</a>
+    <nav>
+      <a href="/play">Jouer</a>
+      <a href="/tournaments">Tournois</a>
+      <a href="/shop">Boutique</a>
+      <a href="/leaderboard">Classement</a>
+      <a href="/" id="btn-home">← Accueil</a>
+    </nav>
+  </div>
+
+  <div class="card">
+    <div class="profile">
+      <div class="avatar" id="avatar">?</div>
+      <div>
+        <div class="pseudo" id="pseudo">…</div>
+        <div class="stat-row">
+          <span class="pill"><span class="icon">🪙</span><span id="pc">0</span> PC</span>
+          <span class="pill"><span class="icon">⚡</span>TP: <span id="inv-tp">0</span></span>
+          <span class="pill"><span class="icon">↗️</span>Diag: <span id="inv-diag">0</span></span>
+          <span class="pill"><span class="icon">🔄</span>Virage: <span id="inv-pivot">0</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="color:var(--bleu-fonce);">🛒 Capacités à l'unité</h2>
+    <p class="muted mb-2">Achète les capacités consommables que tu utilises en partie. Les bornes sont toujours 3 (gratuites).</p>
+    <div class="grid grid-3">
+      <div class="shop-item">
+        <div class="item-icon">⚡</div>
+        <div class="item-name">Téléportation</div>
+        <div class="item-price">3 PC / unité</div>
+        <div class="item-desc">Se téléporter puis déplacer le pivot.</div>
+        <div class="row" style="justify-content:center;">
+          <input type="number" id="q-tp" value="1" min="1" max="50" style="width:60px;">
+          <button class="btn btn-mini" data-buy="tp">Acheter</button>
+        </div>
+      </div>
+      <div class="shop-item">
+        <div class="item-icon">↗️</div>
+        <div class="item-name">Diagonale</div>
+        <div class="item-price">2 PC / unité</div>
+        <div class="item-desc">Glisser en diagonale.</div>
+        <div class="row" style="justify-content:center;">
+          <input type="number" id="q-diagonale" value="1" min="1" max="50" style="width:60px;">
+          <button class="btn btn-mini" data-buy="diagonale">Acheter</button>
+        </div>
+      </div>
+      <div class="shop-item">
+        <div class="item-icon">🔄</div>
+        <div class="item-name">Pivot (virage)</div>
+        <div class="item-price">1 PC / unité</div>
+        <div class="item-desc">Glisser sur l'axe adverse.</div>
+        <div class="row" style="justify-content:center;">
+          <input type="number" id="q-pivot" value="1" min="1" max="50" style="width:60px;">
+          <button class="btn btn-mini" data-buy="pivot">Acheter</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="color:var(--bleu-fonce);">🎁 Coffres</h2>
+    <p class="muted mb-2">Achète un coffre, puis ouvre-le pour découvrir son contenu aléatoire. Plus le niveau est élevé, meilleures sont les gains.</p>
+    <div class="grid grid-3" id="coffres-grid"></div>
+  </div>
+
+  <div class="card">
+    <h2 style="color:var(--bleu-fonce);">📦 Mes coffres non ouverts</h2>
+    <div id="mes-coffres" class="col"></div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/api.js"></script>
+<script>
+if (PIVOT.redirectIfLoggedOut()) {} else {
+  charger();
+}
+
+async function charger() {
+  try {
+    const r = await PIVOT.api('GET', '/shop/info');
+    document.getElementById('pc').textContent = r.pc;
+    document.getElementById('inv-tp').textContent = (r.inventaire && r.inventaire.tp) || 0;
+    document.getElementById('inv-diag').textContent = (r.inventaire && r.inventaire.diagonale) || 0;
+    document.getElementById('inv-pivot').textContent = (r.inventaire && r.inventaire.pivot) || 0;
+    // Afficher les coffres en vente
+    const grid = document.getElementById('coffres-grid');
+    const descCoffres = {
+      1: { icone: '🎁', nom: 'Coffre niv.1', desc: '1 TP OU 3 Pivot OU 1 Diag + 1 Pivot' },
+      2: { icone: '🎁', nom: 'Coffre niv.2', desc: '1 TP + 1 Pivot OU 1 Diag + 2 Pivot OU 2 Diag' },
+      3: { icone: '🎁', nom: 'Coffre niv.3', desc: '2 TP OU 1 TP + 1 Diag + 2 Pivot OU 3 Diag + 1 Pivot' },
+      4: { icone: '🎁', nom: 'Coffre niv.4', desc: '3 TP + 1 Diag OU 2 TP + 2 Diag + 2 Pivot OU 5 Diag' },
+      5: { icone: '🎁', nom: 'Coffre niv.5', desc: '5 TP + 2 Diag OU 4 TP + 3 Diag + 5 Pivot OU 10 Diag + 5 Pivot' }
+    };
+    grid.innerHTML = Object.keys(r.coffres).map(lvl => {
+      const c = r.coffres[lvl];
+      const d = descCoffres[lvl] || { icone: '🎁', nom: 'Coffre', desc: '' };
+      return `<div class="shop-item">
+        <div class="item-icon">${d.icone}</div>
+        <div class="item-name">${d.nom}</div>
+        <div class="item-price">${c.prix} PC</div>
+        <div class="item-desc">${d.desc}</div>
+        <button class="btn btn-mini" data-buy-chest="${lvl}">Acheter</button>
+      </div>`;
+    }).join('');
+    // Mes coffres
+    const mc = document.getElementById('mes-coffres');
+    if (!r.coffresEnStock || r.coffresEnStock.length === 0) {
+      mc.innerHTML = '<p class="muted">Aucun coffre en attente. Achète-en un ci-dessus.</p>';
+    } else {
+      mc.innerHTML = r.coffresEnStock.map(ch => `
+        <div class="row">
+          <span class="pill">🎁 Coffre niv.${ch.chest_level}</span>
+          <button class="btn btn-mini" data-open-chest="${ch.id}">Ouvrir</button>
+        </div>
+      `).join('');
+    }
+    // Avatar
+    const user = PIVOT.getUser();
+    if (user) {
+      document.getElementById('avatar').textContent = user.pseudo.charAt(0).toUpperCase();
+      document.getElementById('pseudo').textContent = user.pseudo;
+    }
+  } catch (e) { PIVOT.toast(e.message, 'error'); }
+}
+
+document.addEventListener('click', async (e) => {
+  const t = e.target.closest('[data-buy]');
+  if (t) {
+    const type = t.dataset.buy;
+    const q = parseInt(document.getElementById('q-' + type).value, 10) || 1;
+    try {
+      const r = await PIVOT.api('POST', '/shop/buy-capacite', { type, quantite: q });
+      PIVOT.toast(`Acheté ${q} ${type} pour ${r.depense} PC.`);
+      charger();
+    } catch (err) { PIVOT.toast(err.message, 'error'); }
+    return;
+  }
+  const t2 = e.target.closest('[data-buy-chest]');
+  if (t2) {
+    const lvl = parseInt(t2.dataset.buyChest, 10);
+    try {
+      const r = await PIVOT.api('POST', '/shop/buy-chest', { niveau: lvl });
+      PIVOT.toast(`Coffre niv.${lvl} acheté pour ${r.depense} PC.`);
+      charger();
+    } catch (err) { PIVOT.toast(err.message, 'error'); }
+    return;
+  }
+  const t3 = e.target.closest('[data-open-chest]');
+  if (t3) {
+    const id = parseInt(t3.dataset.openChest, 10);
+    try {
+      const r = await PIVOT.api('POST', '/shop/open-chest', { chestId: id });
+      PIVOT.toast(`Coffre niv.${r.niveau} ouvert : ${r.recap} !`);
+      PIVOT.lancerConfettis && PIVOT.lancerConfettis();
+      // confettis locaux
+      lancerConfettis();
+      charger();
+    } catch (err) { PIVOT.toast(err.message, 'error'); }
+    return;
+  }
+});
+
+function lancerConfettis() {
+  const cont = document.createElement('div');
+  cont.className = 'confetti-container';
+  document.body.appendChild(cont);
+  const colors = ['#FFC107', '#FF6B35', '#06D6A0', '#9B5DE5', '#E63946'];
+  for (let i = 0; i < 80; i++) {
+    const p = document.createElement('div');
+    p.className = 'confetti-piece';
+    p.style.left = Math.random() * 100 + 'vw';
+    p.style.background = colors[Math.floor(Math.random() * colors.length)];
+    p.style.animationDelay = (Math.random() * 0.5) + 's';
+    cont.appendChild(p);
+  }
+  setTimeout(() => cont.remove(), 3500);
+}
+</script>
+</body>
+</html>

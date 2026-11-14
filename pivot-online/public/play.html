@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PIVOT Online — Jouer</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <div class="topbar">
+    <a href="/" class="logo">PIVOT</a>
+    <nav>
+      <a href="/play">Jouer</a>
+      <a href="/tournaments">Tournois</a>
+      <a href="/shop">Boutique</a>
+      <a href="/leaderboard">Classement</a>
+      <a href="/" id="btn-home">← Accueil</a>
+    </nav>
+  </div>
+
+  <div id="lobby" class="card">
+    <h2 style="color:var(--bleu-fonce);">Matchmaking ranked</h2>
+    <p class="muted mb-2">L'appariement se fait par tranche de Elo (±50, élargi si nécessaire).</p>
+    <div class="row">
+      <button class="btn btn-large" id="btn-queue">Entrer dans la file</button>
+      <button class="btn btn-rouge btn-large hidden" id="btn-leave-queue">Quitter la file</button>
+    </div>
+    <p class="muted mt-2" id="queue-msg"></p>
+    <hr style="border:none;border-top:2px dashed #ccc;margin:18px 0;">
+    <p class="muted">Tu peux aussi jouer contre un ami via un <a href="/" style="color:var(--orange);font-weight:800;">salon privé</a>.</p>
+  </div>
+
+  <div id="game" class="hidden">
+    <div class="statut-jeu" id="statut">En attente…</div>
+    <div class="game-wrap">
+      <div style="position:relative;">
+        <div class="plateau" id="plateau"></div>
+      </div>
+      <div id="panneau">
+        <div class="camp-card R" id="card-R"><div class="tete"><span class="pastille"></span><span class="nom">Rouge</span><span class="camp-info">↔ horizontal</span></div><div class="stock"></div></div>
+        <div class="camp-card B" id="card-B"><div class="tete"><span class="pastille"></span><span class="nom">Bleu</span><span class="camp-info">↕ vertical</span></div><div class="stock"></div></div>
+        <div class="mode-bar" id="modes">
+          <button class="btn" data-mode="glisser">↔ Glisser</button>
+          <button class="btn" data-mode="borne">❌ Poser une borne</button>
+          <button class="btn" data-mode="virage">🔄 Virage (axe adverse)</button>
+          <button class="btn" data-mode="diagonale">↗️ Diagonale</button>
+          <button class="btn" data-mode="tp">⚡ Téléporter (puis déplacer)</button>
+        </div>
+        <p class="muted" id="aide">Choisis une action.</p>
+        <div class="echange hidden card" id="echange">
+          <h3 style="color:var(--bleu-fonce);">Choix des camps</h3>
+          <p class="muted mb-2">Le premier coup est joué. Tu joues Bleu. Tu peux garder ce camp ou échanger.</p>
+          <div class="row">
+            <button class="btn btn-bleu" id="btn-garder">Garder Bleu</button>
+            <button class="btn btn-rouge" id="btn-echanger">Prendre Rouge</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/game-client.js"></script>
+<script>
+if (PIVOT.redirectIfLoggedOut()) {} else {
+  PIVOT.initLobby();
+}
+</script>
+</body>
+</html>

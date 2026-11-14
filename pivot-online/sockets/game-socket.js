@@ -449,19 +449,29 @@ async function finirMatch(io, matchId) {
 
     await client.query('COMMIT');
 
+    // Récupérer les inventaires DB réels (post-consommation) des deux joueurs
+    // pour les afficher sur l'écran de fin.
+    const invP1Final = await chargerInventaire(m.p1Id);
+    const invP2Final = await chargerInventaire(m.p2Id);
+
     // Notifier
     const recapGagnant = {
       winner: e.gagnant,
       pc: pcGagnantFinal, tr: trGagnant, eloDelta: (gagnantId === m.p1Id ? deltaA : deltaB),
       forfait: !!m.forfait,
       quit: !!m.quit,
-      montees
+      montees,
+      // Inventaire DB réel (post-match) — chacun voit le sien + celui de l'adversaire
+      inventaireMoi: gagnantId === m.p1Id ? invP1Final : invP2Final,
+      inventaireAdversaire: gagnantId === m.p1Id ? invP2Final : invP1Final
     };
     const recapPerdant = {
       winner: e.gagnant,
       pc: pcPerdant, tr: trPerdant, eloDelta: (perdantId === m.p1Id ? deltaA : deltaB),
       forfait: !!m.forfait,
-      quit: !!m.quit
+      quit: !!m.quit,
+      inventaireMoi: perdantId === m.p1Id ? invP1Final : invP2Final,
+      inventaireAdversaire: perdantId === m.p1Id ? invP2Final : invP1Final
     };
     io.to(m.p1).emit('match.end', (m.p1Id === gagnantId) ? recapGagnant : recapPerdant);
     io.to(m.p2).emit('match.end', (m.p2Id === gagnantId) ? recapGagnant : recapPerdant);

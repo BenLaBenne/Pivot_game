@@ -109,9 +109,15 @@ function renderProfile(u) {
   document.getElementById('stat-won').textContent = u.matches_won;
   const rate = u.matches_played ? Math.round(100 * u.matches_won / u.matches_played) : 0;
   document.getElementById('stat-rate').textContent = rate + '%';
-  // Afficher le lien admin si l'utilisateur est admin
+  // Afficher le lien admin si l'utilisateur est admin (admin_level >= 1)
   const navAdmin = document.getElementById('nav-admin');
-  if (navAdmin) navAdmin.style.display = u.is_admin ? 'inline-block' : 'none';
+  if (navAdmin) {
+    const level = u.admin_level || (u.is_admin ? 1 : 0);
+    navAdmin.style.display = level >= 1 ? 'inline-block' : 'none';
+    // Modifier le label selon le niveau
+    if (level === 2) navAdmin.textContent = '👑 Admin';
+    else if (level === 1) navAdmin.textContent = '🛡️ Modo';
+  }
   // Rank
   const rankEl = document.getElementById('rank');
   fetch('/api/leaderboard/user/' + encodeURIComponent(u.pseudo))

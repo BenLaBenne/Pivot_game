@@ -26,6 +26,7 @@
     <div id="admin-access" class="hidden">
       <p class="muted">Vérification des droits…</p>
     </div>
+    <div id="admin-badges" class="row hidden" style="margin-top:10px;"></div>
   </div>
 
   <div id="admin-content" class="hidden">
@@ -110,14 +111,28 @@ let usersPages = 1;
 let giveUserId = null;
 
 // Vérifier l'accès admin
+let myAdminLevel = 0; // 0 = user, 1 = modo, 2 = admin principal
+
 (async function checkAdmin() {
   if (PIVOT.redirectIfLoggedOut()) return;
   try {
     const r = await PIVOT.fetchMe();
-    if (!r.user.is_admin) {
+    const level = r.user.admin_level || (r.user.is_admin ? 1 : 0);
+    if (level < 1) {
       document.getElementById('admin-access').classList.remove('hidden');
       document.getElementById('admin-access').innerHTML = '<p style="color:var(--rouge);font-weight:800;">⛔ Accès refusé : tu n\'es pas admin.</p>';
       return;
+    }
+    myAdminLevel = level;
+    // Afficher le badge du niveau
+    const badges = document.getElementById('admin-badges');
+    badges.classList.remove('hidden');
+    if (level === 2) {
+      badges.innerHTML = '<span class="pill" style="background:linear-gradient(180deg,#FFD700,#B8860B);color:#1B2430;font-weight:900;"><span class="icon">👑</span>Admin principal</span>' +
+                        '<span class="muted">Tu as tous les droits : nommer modos/admins, bannir, supprimer, donner des objets, etc.</span>';
+    } else {
+      badges.innerHTML = '<span class="pill" style="background:linear-gradient(180deg,#5BC0EB,#1976D2);color:white;font-weight:900;"><span class="icon">🛡️</span>Modérateur</span>' +
+                        '<span class="muted">Tu peux bannir, donner des objets, résoudre les signalements. Tu ne peux pas nommer d\'admin/modo.</span>';
     }
     document.getElementById('admin-content').classList.remove('hidden');
     chargerStats();
@@ -151,7 +166,8 @@ async function chargerStats() {
     document.getElementById('stats-grid').innerHTML = `
       <div class="stat-box"><div class="value">${s.users}</div><div class="label">Joueurs</div></div>
       <div class="stat-box"><div class="value">${s.banned}</div><div class="label">Bannis</div></div>
-      <div class="stat-box"><div class="value">${s.admins}</div><div class="label">Admins</div></div>
+      <div class="stat-box"><div class="value">${s.modos}</div><div class="label">Modos 🛡️</div></div>
+      <div class="stat-box"><div class="value">${s.mainAdmins}</div><div class="label">Admins 👑</div></div>
       <div class="stat-box"><div class="value">${s.matches}</div><div class="label">Matchs</div></div>
       <div class="stat-box"><div class="value">${s.openReports}</div><div class="label">Signalements ouverts</div></div>
       <div class="stat-box"><div class="value">${s.pcTotal}</div><div class="label">PC en circulation</div></div>
@@ -170,26 +186,55 @@ async function chargerUsers() {
       list.innerHTML = '<p class="muted">Aucun joueur.</p>';
       return;
     }
-    list.innerHTML = r.users.map(u => `
-      <div class="user-row ${u.banned ? 'banned' : ''} ${u.is_admin ? 'admin' : ''}" data-user-id="${u.id}">
+    list.innerHTML = r.users.map(u => {
+      const level = u.admin_level || (u.is_admin ? 1 : 0);
+      const levelBadge = level === 2 ? ' 👑' : (level === 1 ? ' 🛡️' : '');
+      const isMainAdminRow = level === 2;
+      const isModoRow = level === 1;
+      const isMe = (u.id === (PIVOT.getUser() && PIVOT.getUser().id));
+      // Un modo ne peut pas modifier un autre modo/admin (seulement l'admin principal)
+      const canActOnAdmin = myAdminLevel >= 2 && !isMe;
+      const canActOnModo = myAdminLevel >= 2 && !isMe;
+      const canAct = level === 0 || (level === 1 && canActOnModo) || (level === 2 && false); // admin principal jamais touché
+      const canBan = canAct;
+      const canDelete = (level === 0) && !isMe;  // suppression réservée aux users simples
+      const canGive = !isMe; // on peut give à tout le monde sauf soi
+      const canChangeLevel = (myAdminLevel >= 2) && !isMe; // seul l'admin principal peut changer les niveaux
+
+      // Bouton niveau (admin principal seulement)
+      let levelBtn = '';
+      if (canChangeLevel) {
+        if (level === 2) {
+          levelBtn = `<button class="btn btn-mini btn-rouge" data-action="set-level" data-level="1">Rétrograder en modo</button>`;
+        } else if (level === 1) {
+          levelBtn = `<button class="btn btn-mini btn-bleu" data-action="set-level" data-level="2">Promouvoir admin principal</button>` +
+                     `<button class="btn btn-mini btn-rouge" data-action="set-level" data-level="0">Rétrograder user</button>`;
+        } else {
+          levelBtn = `<button class="btn btn-mini btn-bleu" data-action="set-level" data-level="1">Promouvoir modo</button>` +
+                     `<button class="btn btn-mini btn-bleu" data-action="set-level" data-level="2">Promouvoir admin principal</button>`;
+        }
+      }
+
+      return `
+      <div class="user-row ${u.banned ? 'banned' : ''} ${level >= 1 ? 'admin' : ''}" data-user-id="${u.id}">
         <div>#${u.id}</div>
-        <div class="pseudo">${escapeHtml(u.pseudo)} ${u.is_admin ? '⭐' : ''} ${u.banned ? '🚫' : ''}</div>
+        <div class="pseudo">${escapeHtml(u.pseudo)}${levelBadge} ${u.banned ? '🚫' : ''} ${isMe ? '(toi)' : ''}</div>
         <div title="Elo">🎯 ${u.elo}</div>
         <div title="TR">🏆 ${u.trophies}</div>
         <div title="PC">🪙 ${u.pc_balance}</div>
         <div class="user-actions">
-          ${u.banned
-            ? `<button class="btn btn-mini btn-vert" data-action="unban">Débannir</button>`
-            : `<button class="btn btn-mini btn-rouge" data-action="ban">Bannir</button>`}
-          <button class="btn btn-mini" data-action="give">🎁 Donner</button>
-          ${u.is_admin
-            ? `<button class="btn btn-mini btn-rouge" data-action="unset-admin">Retirer admin</button>`
-            : `<button class="btn btn-mini btn-bleu" data-action="set-admin">Promouvoir admin</button>`}
+          ${canBan
+            ? (u.banned
+              ? `<button class="btn btn-mini btn-vert" data-action="unban">Débannir</button>`
+              : `<button class="btn btn-mini btn-rouge" data-action="ban">Bannir</button>`)
+            : ''}
+          ${canGive ? `<button class="btn btn-mini" data-action="give">🎁 Donner</button>` : ''}
+          ${levelBtn}
           <button class="btn btn-mini" data-action="reset">Reset stats</button>
-          <button class="btn btn-mini btn-rouge" data-action="delete">Supprimer</button>
+          ${canDelete ? `<button class="btn btn-mini btn-rouge" data-action="delete">Supprimer</button>` : ''}
         </div>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
   } catch (e) { PIVOT.toast(e.message, 'error'); }
 }
 
@@ -206,7 +251,7 @@ document.getElementById('users-list').addEventListener('click', async (e) => {
   const pseudo = row.querySelector('.pseudo').textContent.trim();
 
   if (action === 'delete') {
-    if (!confirm(`Supprimer définitivement le compte de ${pseudo} ?`)) return;
+    if (!confirm(`Supprimer définitivement le compte de ${pseudo} ? Toutes ses données seront effacées (matchs anonymisés).`)) return;
     try { await PIVOT.api('POST', `/admin/users/${userId}/delete`, {}); PIVOT.toast('Compte supprimé.'); chargerUsers(); chargerStats(); }
     catch (err) { PIVOT.toast(err.message, 'error'); }
   } else if (action === 'ban') {
@@ -217,14 +262,15 @@ document.getElementById('users-list').addEventListener('click', async (e) => {
   } else if (action === 'unban') {
     try { await PIVOT.api('POST', `/admin/users/${userId}/unban`, {}); PIVOT.toast('Joueur débanni.'); chargerUsers(); chargerStats(); }
     catch (err) { PIVOT.toast(err.message, 'error'); }
-  } else if (action === 'set-admin') {
-    if (!confirm(`Promouvoir ${pseudo} admin ?`)) return;
-    try { await PIVOT.api('POST', `/admin/users/${userId}/set-admin`, { isAdmin: true }); PIVOT.toast('Admin défini.'); chargerUsers(); chargerStats(); }
-    catch (err) { PIVOT.toast(err.message, 'error'); }
-  } else if (action === 'unset-admin') {
-    if (!confirm(`Retirer le rôle admin à ${pseudo} ?`)) return;
-    try { await PIVOT.api('POST', `/admin/users/${userId}/set-admin`, { isAdmin: false }); PIVOT.toast('Admin retiré.'); chargerUsers(); chargerStats(); }
-    catch (err) { PIVOT.toast(err.message, 'error'); }
+  } else if (action === 'set-level') {
+    const level = parseInt(btn.dataset.level, 10);
+    const levelName = level === 2 ? 'admin principal' : (level === 1 ? 'modo' : 'utilisateur simple');
+    if (!confirm(`Changer le niveau de ${pseudo} en "${levelName}" ?`)) return;
+    try {
+      await PIVOT.api('POST', `/admin/users/${userId}/set-admin-level`, { level });
+      PIVOT.toast(`${pseudo} est maintenant ${levelName}.`);
+      chargerUsers(); chargerStats();
+    } catch (err) { PIVOT.toast(err.message, 'error'); }
   } else if (action === 'give') {
     giveUserId = userId;
     document.getElementById('give-user-name').textContent = pseudo;
@@ -266,12 +312,17 @@ async function chargerReports() {
       list.innerHTML = '<p class="muted">Aucun signalement.</p>';
       return;
     }
-    list.innerHTML = r.reports.map(rep => `
+    list.innerHTML = r.reports.map(rep => {
+      const repLevel = rep.reported_admin_level || (rep.reported_is_admin ? 1 : 0);
+      const canBanReported = (repLevel === 0) || (repLevel === 1 && myAdminLevel >= 2);
+      // Le modo ne peut pas bannir un autre modo/admin depuis un signalement
+      return `
       <div class="report-row" data-report-id="${rep.id}">
         <div class="report-header">
           <span>
             <span class="report-reason">${escapeHtml(rep.reason)}</span>
             ${escapeHtml(rep.reporter_pseudo || '?')} → ${escapeHtml(rep.reported_pseudo || '?')}
+            ${repLevel === 2 ? ' 👑' : (repLevel === 1 ? ' 🛡️' : '')}
             ${rep.reported_banned ? '🚫' : ''}
           </span>
           <span class="muted">${new Date(rep.created_at).toLocaleString('fr-FR')}</span>
@@ -282,10 +333,10 @@ async function chargerReports() {
           <div class="user-actions" style="margin-top:6px;">
             <button class="btn btn-mini btn-vert" data-report-action="resolve" data-report-id="${rep.id}">Résoudre</button>
             <button class="btn btn-mini btn-rouge" data-report-action="dismiss" data-report-id="${rep.id}">Écarter</button>
-            <button class="btn btn-mini" data-report-ban-user="${rep.reported_id}" data-report-ban-pseudo="${escapeHtml(rep.reported_pseudo || '')}">Bannir ce joueur</button>
+            ${canBanReported ? `<button class="btn btn-mini" data-report-ban-user="${rep.reported_id}" data-report-ban-pseudo="${escapeHtml(rep.reported_pseudo || '')}">Bannir ce joueur</button>` : '<span class="muted" style="font-size:0.8rem;">(modo/admin — réservé à l\'admin principal)</span>'}
           </div>` : ''}
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
   } catch (e) { PIVOT.toast(e.message, 'error'); }
 }
 

@@ -476,16 +476,22 @@ PIVOT.renderFin = function(data) {
     PIVOT.sounds && PIVOT.sounds.play('lose');
   }
 
-  // Récupérer l'inventaire restant de chacun
-  const monStock = etat.stock[role] || { bornes: 0, virage: 0, tp: 0, diagonale: 0 };
-  const advStock = etat.stock[autre(role)] || { bornes: 0, virage: 0, tp: 0, diagonale: 0 };
+  // BUG FIX : utiliser data.winner (envoyé par le serveur) plutôt que etat.gagnant
+  // car match.end arrive AVANT le match.update qui mettrait à jour etat.gagnant.
+  const gagnantCote = data.winner || (etat && etat.gagnant) || null;
+  const won = (gagnantCote === role);
+
+  // Inventaire DB réel (envoyé par le serveur, rafraîchi à la fin du match).
+  // data.inventaireMoi et data.inventaireAdversaire sont les vrais stocks DB
+  // (post-consommation des capacités utilisées pendant la partie).
+  const monInvDB = data.inventaireMoi || { tp: '?', diagonale: '?', pivot: '?' };
+  const advInvDB = data.inventaireAdversaire || { tp: '?', diagonale: '?', pivot: '?' };
 
   // Construire un écran de fin plein écran par-dessus la page
   // On retire un éventuel précédent
   const old = document.getElementById('end-screen');
   if (old) old.remove();
 
-  const won = (etat.gagnant === role);
   const reasonText = data.forfait
     ? (won ? 'Victoire par forfait' : 'Perdu par forfait (déconnexion ou abandon)')
     : (won ? 'L\'adversaire est bloqué !' : 'Tu es bloqué — plus aucun mouvement.');
@@ -508,15 +514,14 @@ PIVOT.renderFin = function(data) {
     recH += '</div>';
   }
 
-  // Inventaires restants
-  function invHtml(stock, label) {
+  // Inventaire DB réel — affiché côte à côte
+  function invHtml(inv, label) {
     return `<div class="inv-end">
-      <div class="inv-end-label">${label}</div>
+      <div class="inv-end-label">${escapeHtml(label)}</div>
       <div class="inv-end-grid">
-        <div class="inv-end-item"><div class="icon">❌</div><div>${stock.bornes}/3 bornes</div></div>
-        <div class="inv-end-item"><div class="icon">🔄</div><div>${stock.virage} virages</div></div>
-        <div class="inv-end-item"><div class="icon">⚡</div><div>${stock.tp} TP</div></div>
-        <div class="inv-end-item"><div class="icon">↗️</div><div>${stock.diagonale} diag</div></div>
+        <div class="inv-end-item"><div class="icon">🔄</div><div>${inv.pivot !== undefined ? inv.pivot : '?'} virages</div></div>
+        <div class="inv-end-item"><div class="icon">⚡</div><div>${inv.tp !== undefined ? inv.tp : '?'} TP</div></div>
+        <div class="inv-end-item"><div class="icon">↗️</div><div>${inv.diagonale !== undefined ? inv.diagonale : '?'} diag</div></div>
       </div>
     </div>`;
   }
@@ -527,7 +532,7 @@ PIVOT.renderFin = function(data) {
   end.innerHTML = `
     <div class="end-card">
       <div class="end-title" style="color:${titleColor};text-shadow:3px 3px 0 rgba(0,0,0,0.4);">${titleText}</div>
-      <div class="end-subtitle">${won ? (etat.noms[etat.gagnant] + ' remporte la partie') : ((etat.noms[autre(role)] || 'Adversaire') + ' gagne')}</div>
+      <div class="end-subtitle">${won ? 'Tu remportes la partie !' : ((adversairePseudo || 'Adversaire') + ' gagne')}</div>
       <div class="end-reason">${escapeHtml(reasonText)}</div>
 
       <div class="end-section">
@@ -536,10 +541,10 @@ PIVOT.renderFin = function(data) {
       </div>
 
       <div class="end-section">
-        <div class="end-section-title">Inventaire restant</div>
+        <div class="end-section-title">Inventaire</div>
         <div class="end-inv-row">
-          ${invHtml(monStock, 'Moi')}
-          ${invHtml(advStock, adversairePseudo || 'Adversaire')}
+          ${invHtml(monInvDB, 'Moi')}
+          ${invHtml(advInvDB, adversairePseudo || 'Adversaire')}
         </div>
       </div>
 

@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS users (
   banned BOOLEAN DEFAULT FALSE,
   banned_reason TEXT,
   banned_at TIMESTAMP,
+  admin_level INTEGER DEFAULT 0,  -- 0 = user, 1 = modo, 2 = admin principal
   created_at TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_users_pseudo ON users(pseudo);
@@ -168,7 +169,7 @@ async function initDb() {
   console.log('[init-db] Création / vérification du schéma...');
   await pool.query(SCHEMA);
 
-  // Migrations: ajouter les colonnes is_admin / banned / banned_reason / banned_at
+  // Migrations: ajouter les colonnes is_admin / banned / banned_reason / banned_at / admin_level
   // si la table users existe déjà sans elles (DB existante).
   await pool.query(`
     DO $$
@@ -189,6 +190,12 @@ async function initDb() {
                      WHERE table_name='users' AND column_name='banned_at') THEN
         ALTER TABLE users ADD COLUMN banned_at TIMESTAMP;
       END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name='users' AND column_name='admin_level') THEN
+        ALTER TABLE users ADD COLUMN admin_level INTEGER DEFAULT 0;
+      END IF;
+      -- Synchroniser is_admin avec admin_level (admin_level >= 1 ⇒ is_admin = TRUE)
+      UPDATE users SET is_admin = (admin_level >= 1);
     END $$;
   `);
   console.log('[init-db] Schéma OK.');

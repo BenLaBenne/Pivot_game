@@ -40,20 +40,24 @@ router.post('/signup', async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10);
     const ins = await pool.query(
-      `INSERT INTO users (pseudo, password_hash) VALUES ($1, $2) RETURNING id, pseudo, elo, trophies, pc_balance, win_streak`,
+      `INSERT INTO users (pseudo, password_hash, pc_balance) VALUES ($1, $2, 10) RETURNING id, pseudo, elo, trophies, pc_balance, win_streak`,
       [pseudo, hash]
     );
     const user = ins.rows[0];
 
-    // Inventaire par défaut : 1 pivot gratuit à l'inscription
+    // Inventaire par défaut à l'inscription : 1 TP, 1 Diagonale, 2 Pivot (virages)
+    // (les bornes sont toujours 3 en partie, gratuites, donc pas stockées)
     await pool.query(
-      `INSERT INTO user_inventory (user_id, ability_type, quantity) VALUES ($1, 'pivot', 1)
+      `INSERT INTO user_inventory (user_id, ability_type, quantity) VALUES
+         ($1, 'tp', 1),
+         ($1, 'diagonale', 1),
+         ($1, 'pivot', 2)
        ON CONFLICT (user_id, ability_type) DO UPDATE SET quantity = EXCLUDED.quantity`,
       [user.id]
     );
 
     const token = makeToken(user);
-    res.json({ token, user: { ...user, elo: user.elo, trophies: user.trophies, pc: user.pc_balance } });
+    res.json({ token, user: { ...user, elo: user.elo, trophies: user.trophies, pc: user.pc_balance, is_admin: false, admin_level: 0 } });
   } catch (e) {
     console.error('[auth] signup:', e);
     res.status(500).json({ error: 'Erreur serveur.' });
@@ -75,7 +79,7 @@ router.post('/login', async (req, res) => {
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) return res.status(401).json({ error: 'Pseudo ou mot de passe incorrect.' });
     const token = makeToken(user);
-    res.json({ token, user: { id: user.id, pseudo: user.pseudo, elo: user.elo, trophies: user.trophies, pc: user.pc_balance, is_admin: user.is_admin } });
+    res.json({ token, user: { id: user.id, pseudo: user.pseudo, elo: user.elo, trophies: user.trophies, pc: user.pc_balance, is_admin: user.is_admin, admin_level: user.admin_level || (user.is_admin ? 1 : 0) } });
   } catch (e) {
     console.error('[auth] login:', e);
     res.status(500).json({ error: 'Erreur serveur.' });
@@ -86,7 +90,7 @@ router.post('/login', async (req, res) => {
 router.get('/me', authMiddleware, async (req, res) => {
   try {
     const r = await pool.query(
-      `SELECT id, pseudo, elo, trophies, pc_balance, win_streak, matches_played, matches_won, matches_lost, is_admin, banned
+      `SELECT id, pseudo, elo, trophies, pc_balance, win_streak, matches_played, matches_won, matches_lost, is_admin, banned, admin_level
        FROM users WHERE id = $1`,
       [req.user.id]
     );
@@ -111,6 +115,7 @@ router.get('/me', authMiddleware, async (req, res) => {
         pc: u.pc_balance, win_streak: u.win_streak,
         matches_played: u.matches_played, matches_won: u.matches_won, matches_lost: u.matches_lost,
         is_admin: u.is_admin,
+        admin_level: u.admin_level || (u.is_admin ? 1 : 0),
         inventaire, coffres: coffres.rows
       }
     });

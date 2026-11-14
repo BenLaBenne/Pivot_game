@@ -15,6 +15,7 @@
       <a href="/tournaments">Tournois</a>
       <a href="/shop">Boutique</a>
       <a href="/leaderboard">Classement</a>
+      <a href="/pass" style="color:var(--jaune);">Pass</a>
       <a href="/admin" id="nav-admin" style="display:none;color:var(--jaune);">Admin</a>
       <a href="#" id="btn-logout">Déconnexion</a>
     </nav>
@@ -75,6 +76,22 @@
       <div><strong id="stat-rate">0%</strong><br><span class="muted">Win rate</span></div>
     </div>
   </div>
+
+  <!-- Pass de Combat -->
+  <div class="card">
+    <h2 style="color:var(--bleu-fonce);">🎫 Pass de Combat</h2>
+    <div id="pass-mini" style="background:white;border:3px solid #1B2430;border-radius:12px;padding:12px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-family:'Lilita One',cursive;">
+        <span id="pass-mini-level">Niveau 0 / 30</span>
+        <span id="pass-mini-xp" style="opacity:0.7;">0 XP</span>
+      </div>
+      <div style="background:#eee;border:2px solid #1B2430;border-radius:10px;height:18px;overflow:hidden;">
+        <div id="pass-mini-fill" style="background:linear-gradient(90deg,#FFC107,#FF6B35);height:100%;width:0%;transition:width 0.4s;"></div>
+      </div>
+      <p class="muted mt-1" id="pass-mini-info" style="font-size:0.85rem;">Chargement...</p>
+      <button class="btn btn-mini mt-2" onclick="window.location.href='/pass'">Voir le Pass →</button>
+    </div>
+  </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -87,6 +104,7 @@ async function loadMe() {
     const u = r.user;
     PIVOT.setUser(u);
     renderProfile(u);
+    loadMiniPass();  // charger le mini pass
   } catch (e) {
     if (e.message.includes('Token')) {
       PIVOT.clearToken();
@@ -94,6 +112,26 @@ async function loadMe() {
     } else {
       PIVOT.toast(e.message, 'error');
     }
+  }
+}
+
+// Charge le mini-pass pour le dashboard
+async function loadMiniPass() {
+  try {
+    const r = await PIVOT.api('GET', '/pass');
+    const p = r.pass;
+    document.getElementById('pass-mini-level').textContent = `Niveau ${p.level} / ${p.totalLevels}`;
+    document.getElementById('pass-mini-xp').textContent = `${p.xp} XP`;
+    document.getElementById('pass-mini-fill').style.width = p.pct + '%';
+    if (p.maxReached) {
+      document.getElementById('pass-mini-info').textContent = 'Niveau maximum atteint ! Bravo 🎉';
+    } else {
+      const remaining = p.nextLevelXp - p.xp;
+      document.getElementById('pass-mini-info').textContent =
+        `${remaining} XP restants pour le niveau ${p.level + 1} — ${r.season.daysRemaining}j restants dans la saison.`;
+    }
+  } catch (e) {
+    document.getElementById('pass-mini-info').textContent = '—';
   }
 }
 

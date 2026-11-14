@@ -166,6 +166,10 @@ function appliquerEchange(e, cote, action) {
 }
 
 function finDeTour(e) {
+  // Incrémenter le compteur de coups du joueur qui vient de jouer
+  // (e.tour est encore le joueur qui a joué — il bascule juste après)
+  if (!e.coupsParJoueur) e.coupsParJoueur = { R: 0, B: 0 };
+  e.coupsParJoueur[e.tour] = (e.coupsParJoueur[e.tour] || 0) + 1;
   e.coups += 1;
   e.tour = autre(e.tour);
   if (e.coups === 1) {
@@ -186,6 +190,7 @@ function vuePublique(e) {
     noms: e.noms,
     stock: e.stock,
     coups: e.coups,
+    coupsParJoueur: e.coupsParJoueur || { R: 0, B: 0 },
     attenteEchange: e.attenteEchange,
     enTp: e.enTp,
     gagnant: e.gagnant

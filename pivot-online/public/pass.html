@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PIVOT Online — Pass de Combat</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <div class="topbar">
+    <a href="/" class="logo">PIVOT</a>
+    <nav>
+      <a href="/play">Jouer</a>
+      <a href="/tournaments">Tournois</a>
+      <a href="/shop">Boutique</a>
+      <a href="/leaderboard">Classement</a>
+      <a href="/pass" style="color:var(--jaune);">Pass</a>
+      <a href="/" id="btn-home">← Accueil</a>
+    </nav>
+  </div>
+
+  <!-- En-tête du pass -->
+  <div class="card" id="pass-header">
+    <h2 style="color:var(--bleu-fonce);">🎫 Pass de Combat</h2>
+    <p class="muted" id="season-info">Chargement...</p>
+    <div class="pass-progress-wrap mt-2">
+      <div class="pass-progress-header">
+        <span id="pass-level">Niveau 0</span>
+        <span id="pass-xp-info">0 / 100 XP</span>
+      </div>
+      <div class="pass-progress-bar">
+        <div id="pass-progress-fill" class="pass-progress-fill"></div>
+      </div>
+      <p class="muted mt-1" id="pass-next-info">Prochain niveau : 100 XP</p>
+    </div>
+  </div>
+
+  <!-- Info XP -->
+  <div class="card">
+    <h3 style="color:var(--bleu-fonce);">💡 Comment gagner de l'XP</h3>
+    <div class="grid grid-3 mt-1">
+      <div class="stat-box"><div class="value" style="color:var(--vert);">+10</div><div class="label">Par victoire</div></div>
+      <div class="stat-box"><div class="value" style="color:var(--rouge);">+3</div><div class="label">Par défaite</div></div>
+      <div class="stat-box"><div class="value" style="color:var(--orange);">+5</div><div class="label">Par coup joué</div></div>
+    </div>
+    <p class="muted mt-2">100 XP par niveau. 30 niveaux par saison.</p>
+  </div>
+
+  <!-- Track des récompenses -->
+  <div class="card">
+    <h3 style="color:var(--bleu-fonce);">🎁 Récompenses</h3>
+    <p class="muted mb-2">Les récompenses sont <strong>automatiquement créditées</strong> quand tu atteins un nouveau niveau.</p>
+    <div id="rewards-track" class="rewards-track">Chargement...</div>
+  </div>
+
+  <!-- Historique des saisons -->
+  <div class="card" id="history-card" style="display:none;">
+    <h3 style="color:var(--bleu-fonce);">📜 Saisons passées</h3>
+    <div id="history-list" class="col"></div>
+  </div>
+
+  <div class="card">
+    <p class="muted">À la fin de chaque mois (saison), tous les comptes retournent à Plastique 1 (TR remis à 0) et le pass est reset. Le Pass de Combat est purement cosmétique : aucune récompense ne donne d'avantage en jeu.</p>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/api.js"></script>
+<script>
+if (PIVOT.redirectIfLoggedOut()) {} else {
+  charger();
+}
+
+async function charger() {
+  try {
+    const r = await PIVOT.api('GET', '/pass');
+    const p = r.pass;
+    const s = r.season;
+
+    // En-tête
+    document.getElementById('season-info').textContent =
+      `${s.name} — ${s.daysRemaining} jour(s) restant(s) (fin le ${new Date(s.endDate).toLocaleDateString('fr-FR')})`;
+
+    // Barre de progression
+    document.getElementById('pass-level').textContent = `Niveau ${p.level} / ${p.totalLevels}`;
+    if (p.maxReached) {
+      document.getElementById('pass-xp-info').textContent = `NIVEAU MAX !`;
+      document.getElementById('pass-next-info').textContent = 'Tu as atteint le niveau maximum. Bravo !';
+      document.getElementById('pass-progress-fill').style.width = '100%';
+    } else {
+      document.getElementById('pass-xp-info').textContent =
+        `${p.xpInCurrentLevel} / ${p.xpForNextLevel} XP (total: ${p.xp})`;
+      document.getElementById('pass-next-info').textContent =
+        `${p.nextLevelXp - p.xp} XP restants pour atteindre le niveau ${p.level + 1}`;
+      document.getElementById('pass-progress-fill').style.width = p.pct + '%';
+    }
+
+    // Track des récompenses
+    const track = document.getElementById('rewards-track');
+    track.innerHTML = r.rewards.map(rw => {
+      const isCurrent = rw.current;
+      const isUnlocked = rw.unlocked;
+      const cls = isUnlocked ? 'reward-box unlocked' : (isCurrent ? 'reward-box current' : 'reward-box locked');
+      const statusIcon = isUnlocked ? '✅' : (isCurrent ? '▶️' : '🔒');
+      return `
+        <div class="${cls}">
+          <div class="reward-level">Niv. ${rw.level}</div>
+          <div class="reward-icon-big">${escapeHtml(rw.icon)}</div>
+          <div class="reward-status">${statusIcon}</div>
+        </div>
+      `;
+    }).join('<div class="reward-arrow">→</div>');
+
+    // Historique
+    if (r.history && r.history.length > 0) {
+      document.getElementById('history-card').style.display = '';
+      document.getElementById('history-list').innerHTML = r.history.map(h => `
+        <div class="row" style="justify-content:space-between;background:white;border:2px solid #1B2430;border-radius:10px;padding:8px 12px;">
+          <div><strong>${escapeHtml(h.name)}</strong></div>
+          <div>Niveau ${h.final_level} — ${h.final_xp} XP — ${h.final_trophies} TR</div>
+        </div>
+      `).join('');
+    }
+  } catch (e) {
+    PIVOT.toast(e.message, 'error');
+    document.getElementById('season-info').textContent = 'Erreur de chargement.';
+  }
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+}
+</script>
+</body>
+</html>

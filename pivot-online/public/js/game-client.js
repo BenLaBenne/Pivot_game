@@ -623,6 +623,21 @@ PIVOT.renderFin = function(data) {
     recH += '</div>';
   }
 
+  // Pass de Combat : XP gagnée + level-ups
+  if (data.pass && typeof data.pass.xpGagne === 'number') {
+    recH += `<div class="xp-line"><span class="xp-icon">✨</span><span class="xp-amount">+${data.pass.xpGagne} XP</span> <span class="muted" style="font-size:0.85rem;">Pass de Combat</span></div>`;
+    if (data.pass.levelsGained > 0) {
+      recH += '<div class="pass-levelup-block">';
+      recH += `<div class="pass-levelup-title">🎫 PASS NIVEAU ${data.pass.newLevel} ! (+${data.pass.levelsGained})</div>`;
+      if (data.pass.rewards && data.pass.rewards.length) {
+        for (const r of data.pass.rewards) {
+          recH += `<div class="pass-levelup-line">🎁 ${escapeHtml(r)}</div>`;
+        }
+      }
+      recH += '</div>';
+    }
+  }
+
   // Inventaire DB réel — affiché côte à côte
   function invHtml(inv, label) {
     return `<div class="inv-end">

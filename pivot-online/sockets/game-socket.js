@@ -31,7 +31,9 @@ const { appliquerElo } = require('../elo');
 const matchmaking = require('../matchmaking');
 const rules = require('../game/rules');
 const state = require('../game/state');
-const { verifierMontees, rangPourTR } = require('../ranks');
+const { verifierMontees, rangPourTR, appliquerRecompense } = require('../ranks');
+const pass = require('../pass');
+const { checkSeason } = require('../seasons');
 
 const JWT_SECRET = () => process.env.JWT_SECRET || 'dev-secret-change-me';
 
@@ -738,6 +740,13 @@ async function finirMatch(io, matchId) {
     );
     await client.query('COMMIT');
 
+    // ===== APRÈS COMMIT : vérifier/changer de saison (peut reset TR si nouveau mois) =====
+    try {
+      await checkSeason();
+    } catch (eS) {
+      console.error('[socket] checkSeason erreur (non bloquant):', eS.message);
+    }
+
     // ===== APRÈS COMMIT : créditer les montées de rank (utilise pool, hors transaction) =====
     // Si verifierMontees échoue, le match est déjà enregistré — on perd juste les
     // récompenses de montée (mais pas le PC/TR/Elo du match lui-même).
@@ -748,7 +757,73 @@ async function finirMatch(io, matchId) {
       montees = [];
     }
 
-    // Recharger les inventaires APRES les montées de rank (pour inclure les récompenses)
+    // ===== Pass de Combat : calculer XP et level-ups pour les deux joueurs =====
+    let xpGagnant = 0, xpPerdant = 0;
+    let passGagnant = null, passPerdant = null;
+    try {
+      const coupsGagnant = (e.coupsParJoueur && e.coupsParJoueur[e.gagnant]) || 0;
+      const coupsPerdant = (e.coupsParJoueur && e.coupsParJoueur[(e.gagnant === 'R') ? 'B' : 'R']) || 0;
+      xpGagnant = pass.xpPourMatch(true, coupsGagnant);
+      xpPerdant = pass.xpPourMatch(false, coupsPerdant);
+
+      // Charger le pass actuel des deux joueurs
+      const passG = await pool.query('SELECT pass_xp, pass_level FROM users WHERE id = $1', [gagnantId]);
+      const passP = await pool.query('SELECT pass_xp, pass_level FROM users WHERE id = $1', [perdantId]);
+      if (passG.rowCount > 0 && passP.rowCount > 0) {
+        const oldXpG = passG.rows[0].pass_xp || 0;
+        const oldLevelG = passG.rows[0].pass_level || 0;
+        const oldXpP = passP.rows[0].pass_xp || 0;
+        const oldLevelP = passP.rows[0].pass_level || 0;
+
+        // Calculer nouveaux XP + level-ups
+        const resG = pass.applyXp(oldXpG, oldLevelG, xpGagnant);
+        const resP = pass.applyXp(oldXpP, oldLevelP, xpPerdant);
+
+        // Mettre à jour en DB
+        await pool.query('UPDATE users SET pass_xp = $1, pass_level = $2 WHERE id = $3',
+          [resG.newXp, resG.newLevel, gagnantId]);
+        await pool.query('UPDATE users SET pass_xp = $1, pass_level = $2 WHERE id = $3',
+          [resP.newXp, resP.newLevel, perdantId]);
+
+        // Créditer les récompenses des nouveaux niveaux (gagnant)
+        let recompRecapG = [];
+        for (const reward of resG.newRewards) {
+          try { const recap = await appliquerRecompense(gagnantId, reward); if (recap) recompRecapG.push(recap); }
+          catch (eR) { console.error('[pass] crédit reward gagnant:', eR.message); }
+        }
+        let recompRecapP = [];
+        for (const reward of resP.newRewards) {
+          try { const recap = await appliquerRecompense(perdantId, reward); if (recap) recompRecapP.push(recap); }
+          catch (eR) { console.error('[pass] crédit reward perdant:', eR.message); }
+        }
+
+        passGagnant = {
+          xpGagne: xpGagnant,
+          newXp: resG.newXp,
+          newLevel: resG.newLevel,
+          levelsGained: resG.levelsGained,
+          rewards: recompRecapG
+        };
+        passPerdant = {
+          xpGagne: xpPerdant,
+          newXp: resP.newXp,
+          newLevel: resP.newLevel,
+          levelsGained: resP.levelsGained,
+          rewards: recompRecapP
+        };
+
+        if (resG.levelsGained > 0) {
+          console.log(`[pass] ${gagnantId}: +${xpGagnant} XP, ${resG.levelsGained} niveau(x) gagné(s) → niveau ${resG.newLevel}.`);
+        }
+        if (resP.levelsGained > 0) {
+          console.log(`[pass] ${perdantId}: +${xpPerdant} XP, ${resP.levelsGained} niveau(x) gagné(s) → niveau ${resP.newLevel}.`);
+        }
+      }
+    } catch (eX) {
+      console.error('[socket] Pass XP erreur (non bloquant):', eX.message);
+    }
+
+    // Recharger les inventaires APRES les montées de rank + pass (pour inclure les récompenses)
     try {
       invP1Final = await chargerInventaire(m.p1Id);
       invP2Final = await chargerInventaire(m.p2Id);
@@ -764,7 +839,8 @@ async function finirMatch(io, matchId) {
       pc: pcGagnantFinal, tr: trGagnant, eloDelta: (gagnantId === m.p1Id ? deltaA : deltaB),
       forfait: !!m.forfait, quit: !!m.quit, montees,
       inventaireMoi: gagnantId === m.p1Id ? invP1Final : invP2Final,
-      inventaireAdversaire: gagnantId === m.p1Id ? invP2Final : invP1Final
+      inventaireAdversaire: gagnantId === m.p1Id ? invP2Final : invP1Final,
+      pass: passGagnant  // { xpGagne, newXp, newLevel, levelsGained, rewards }
     };
     recapPerdant = {
       winner: e.gagnant,
@@ -773,7 +849,8 @@ async function finirMatch(io, matchId) {
       pc: pcPerdant, tr: trPerdant, eloDelta: (perdantId === m.p1Id ? deltaA : deltaB),
       forfait: !!m.forfait, quit: !!m.quit,
       inventaireMoi: perdantId === m.p1Id ? invP1Final : invP2Final,
-      inventaireAdversaire: perdantId === m.p1Id ? invP2Final : invP1Final
+      inventaireAdversaire: perdantId === m.p1Id ? invP2Final : invP1Final,
+      pass: passPerdant
     };
 
     // Marquer le salon comme 'finished' si match privé

@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS users (
   banned_reason TEXT,
   banned_at TIMESTAMP,
   admin_level INTEGER DEFAULT 0,  -- 0 = user, 1 = modo, 2 = admin principal
+  pass_xp INTEGER DEFAULT 0,      -- XP accumulée pour le Pass de Combat
+  pass_level INTEGER DEFAULT 0,  -- Niveau actuel du Pass (0 à 30)
   created_at TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_users_pseudo ON users(pseudo);
@@ -163,6 +165,28 @@ CREATE TABLE IF NOT EXISTS chest_openings (
   rewards TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- ===== Saisons mensuelles (Pass de Combat) =====
+-- Une saison dure 1 mois. À la fin de la saison, les TR de tous les joueurs
+-- sont réinitialisés à 0 (retour à Plastique 1), et le pass est reset.
+CREATE TABLE IF NOT EXISTS seasons (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(64) UNIQUE NOT NULL,  -- ex: "Saison 2026-11"
+  start_date TIMESTAMP NOT NULL,
+  end_date TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- ===== Historique du pass par saison (snapshot avant reset) =====
+CREATE TABLE IF NOT EXISTS user_season_history (
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  season_id INTEGER REFERENCES seasons(id) ON DELETE CASCADE,
+  final_xp INTEGER DEFAULT 0,
+  final_level INTEGER DEFAULT 0,
+  final_trophies INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT NOW(),
+  PRIMARY KEY (user_id, season_id)
+);
 `;
 
 async function initDb() {
@@ -184,6 +208,8 @@ async function initDb() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_reason TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_at TIMESTAMP;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_level INTEGER DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS pass_xp INTEGER DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS pass_level INTEGER DEFAULT 0;
     ALTER TABLE matches ADD COLUMN IF NOT EXISTS tournament_id INTEGER;
     ALTER TABLE matches ADD COLUMN IF NOT EXISTS room_code VARCHAR(6);
     ALTER TABLE matches ADD COLUMN IF NOT EXISTS finished_at TIMESTAMP;

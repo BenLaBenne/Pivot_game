@@ -43,6 +43,7 @@ function nouvelEtat(matchType = 'ranked') {
     noms: { R: 'Joueur 1', B: 'Joueur 2' },
     ids: { R: null, B: null },
     coups: 0,
+    coupsParJoueur: { R: 0, B: 0 },   // actions par joueur (pour XP pass)
     attenteEchange: false,
     enTp: false,              // true si le joueur vient de téléporter et doit encore déplacer
     gagnant: null,

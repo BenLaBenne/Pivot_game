@@ -56,6 +56,7 @@ const tournamentsRoutes = require('./routes/tournaments');
 const leaderboardRoutes = require('./routes/leaderboard');
 const adminRoutes = require('./routes/admin');
 const reportsRoutes = require('./routes/reports');
+const passRoutes = require('./routes/pass');
 
 app.use('/api/auth', authRoutes.router);
 app.use('/api/shop', shopRoutes);
@@ -64,6 +65,7 @@ app.use('/api/tournaments', tournamentsRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/reports', reportsRoutes);
+app.use('/api/pass', passRoutes);
 
 // Health check pour render.com — toujours OK, même avant init-db
 app.get('/api/health', (req, res) => res.json({
@@ -87,7 +89,8 @@ const pagesMap = {
   '/leaderboard': 'leaderboard.html',
   '/tournaments': 'tournaments.html',
   '/profile': 'profile.html',
-  '/admin': 'admin.html'
+  '/admin': 'admin.html',
+  '/pass': 'pass.html'
 };
 for (const [path_, file] of Object.entries(pagesMap)) {
   app.get(path_, (req, res) => res.sendFile(path.join(__dirname, 'public', file)));
@@ -122,6 +125,16 @@ server.listen(PORT, '0.0.0.0', () => {
     // Enregistrer le socket une fois la DB prête
     gameSocket.register(io);
     console.log('[server] Socket.io enregistré. Le serveur est pleinement opérationnel.');
+
+    // Vérifier la saison au démarrage (peut reset TR si nouveau mois)
+    try {
+      const { checkSeason } = require('./seasons');
+      await checkSeason();
+      // Puis toutes les heures (au cas où le mois change pendant que le serveur tourne)
+      setInterval(() => checkSeason().catch(e => console.error('[season] check:', e.message)), 60 * 60 * 1000);
+    } catch (eS) {
+      console.error('[server] Erreur init saison:', eS.message);
+    }
   } catch (e) {
     dbError = e.message || String(e);
     console.error('[server] Erreur init-db:', dbError);

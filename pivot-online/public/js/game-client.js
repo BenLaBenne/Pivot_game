@@ -70,6 +70,12 @@ PIVOT.initLobby = function() {
     adversairePseudo = data.adversaire && data.adversaire.pseudo;
     adversaireElo = data.adversaire && data.adversaire.elo;
     mode = 'glisser'; // Toujours commencer en mode Glisser
+    // Reset watchdog pour le nouveau match
+    PIVOT._endScreenShown = false;
+    clearTimeout(PIVOT._endWatchdog);
+    // Retirer un éventuel écran de fin précédent
+    const oldEnd = document.getElementById('end-screen');
+    if (oldEnd) oldEnd.remove();
     lobby.classList.add('hidden');
     game.classList.remove('hidden');
     document.getElementById('statut').textContent =
@@ -113,6 +119,11 @@ PIVOT.initRoom = function(code) {
     adversairePseudo = data.adversaire && data.adversaire.pseudo;
     adversaireElo = data.adversaire && data.adversaire.elo;
     mode = 'glisser';
+    // Reset watchdog pour le nouveau match
+    PIVOT._endScreenShown = false;
+    clearTimeout(PIVOT._endWatchdog);
+    const oldEnd = document.getElementById('end-screen');
+    if (oldEnd) oldEnd.remove();
     const lobby = document.getElementById('room-lobby');
     if (lobby) lobby.classList.add('hidden');
     const game = document.getElementById('game');
@@ -131,12 +142,9 @@ PIVOT.bindSocket = function(sock) {
       const ancienTour = etat.tour;
       const ancienEnTp = etat.enTp;
       const ancienCoups = etat.coups;
-      // Le coup vient d'être joué par l'adversaire si data.tour !== ancienTour (tour a changé)
-      // OU data.enTp === true après un tp de l'adversaire
       if (data.coups > ancienCoups && data.tour !== ancienTour) {
         PIVOT.sounds && PIVOT.sounds.play('move');
       } else if (data.coups > ancienCoups) {
-        // Même joueur (tp en 2 étapes) — on joue un son tp
         PIVOT.sounds && PIVOT.sounds.play('tp');
       }
     }
@@ -144,8 +152,29 @@ PIVOT.bindSocket = function(sock) {
     // Revenir en mode Glisser après chaque coup
     mode = 'glisser';
     PIVOT.render();
+
+    // WATCHDOG : si le serveur indique que la partie est finie (data.gagnant) mais
+    // qu'aucun event match.end n'a été reçu dans les 2s, on force l'écran de fin
+    // avec un recap minimal. Cela évite le bug "aucun écran de fin ne s'affiche".
+    if (data && data.gagnant && !PIVOT._endScreenShown) {
+      clearTimeout(PIVOT._endWatchdog);
+      PIVOT._endWatchdog = setTimeout(() => {
+        if (PIVOT._endScreenShown) return;
+        console.warn('[client] Watchdog: match.end non reçu, force écran de fin.');
+        PIVOT.renderFin({
+          winner: data.gagnant,
+          pc: 0, tr: 0, eloDelta: 0,
+          forfait: false, quit: false, montees: [],
+          inventaireMoi: null,
+          inventaireAdversaire: null,
+          watchdog: true
+        });
+      }, 2000);
+    }
   });
   sock.on('match.end', (data) => {
+    clearTimeout(PIVOT._endWatchdog);
+    PIVOT._endScreenShown = true;
     PIVOT.renderFin(data);
   });
   sock.on('match.error', (data) => {
@@ -466,8 +495,17 @@ PIVOT.montrerApercu = function(ev) {
 
 // ==== Écran de fin style Brawl Stars ====
 PIVOT.renderFin = function(data) {
+  // Marquer l'écran comme affiché (anti-watchdog)
+  PIVOT._endScreenShown = true;
+  clearTimeout(PIVOT._endWatchdog);
+
+  // BUG FIX : utiliser data.winner (envoyé par le serveur) plutôt que etat.gagnant
+  // car match.end arrive AVANT le match.update qui mettrait à jour etat.gagnant.
+  const gagnantCote = data.winner || (etat && etat.gagnant) || null;
+  const won = (gagnantCote === role);
+
   // Son de fin
-  if (etat && etat.gagnant === role) {
+  if (won) {
     PIVOT.sounds && PIVOT.sounds.play('win');
     if (data.montees && data.montees.length) {
       setTimeout(() => PIVOT.sounds && PIVOT.sounds.play('rankup'), 800);
@@ -476,16 +514,11 @@ PIVOT.renderFin = function(data) {
     PIVOT.sounds && PIVOT.sounds.play('lose');
   }
 
-  // BUG FIX : utiliser data.winner (envoyé par le serveur) plutôt que etat.gagnant
-  // car match.end arrive AVANT le match.update qui mettrait à jour etat.gagnant.
-  const gagnantCote = data.winner || (etat && etat.gagnant) || null;
-  const won = (gagnantCote === role);
-
   // Inventaire DB réel (envoyé par le serveur, rafraîchi à la fin du match).
-  // data.inventaireMoi et data.inventaireAdversaire sont les vrais stocks DB
-  // (post-consommation des capacités utilisées pendant la partie).
-  const monInvDB = data.inventaireMoi || { tp: '?', diagonale: '?', pivot: '?' };
-  const advInvDB = data.inventaireAdversaire || { tp: '?', diagonale: '?', pivot: '?' };
+  // Si watchdog ou data manquante, fallback sur l'inventaire de début de partie.
+  const invFallback = { tp: '?', diagonale: '?', pivot: '?' };
+  const monInvDB = data.inventaireMoi || inventaireMoi || invFallback;
+  const advInvDB = data.inventaireAdversaire || inventaireAdversaire || invFallback;
 
   // Construire un écran de fin plein écran par-dessus la page
   // On retire un éventuel précédent

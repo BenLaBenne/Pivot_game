@@ -42,6 +42,34 @@ router.post('/join', authMiddleware, async (req, res) => {
   res.json({ ok: true, code, host: false });
 });
 
+// POST /api/rooms/leave — quitte un salon (l'host quitte = salon supprimé)
+// body: { code }
+router.post('/leave', authMiddleware, async (req, res) => {
+  const code = (req.body && req.body.code || '').toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(code)) return res.status(400).json({ error: 'Code invalide.' });
+  const r = await pool.query(`SELECT * FROM private_rooms WHERE code = $1`, [code]);
+  if (r.rowCount === 0) return res.status(404).json({ error: 'Salon introuvable.' });
+  const room = r.rows[0];
+  if (room.host_id === req.user.id) {
+    // L'host quitte → supprimer le salon
+    await pool.query(`DELETE FROM private_rooms WHERE code = $1`, [code]);
+    return res.json({ ok: true, closed: true });
+  }
+  // L'invité quitte → revenir en 'waiting'
+  await pool.query(`UPDATE private_rooms SET status = 'waiting' WHERE code = $1`, [code]);
+  res.json({ ok: true, closed: false });
+});
+
+// DELETE /api/rooms/:code — supprime un salon (host uniquement)
+router.delete('/:code', authMiddleware, async (req, res) => {
+  const code = req.params.code.toUpperCase();
+  const r = await pool.query(`SELECT * FROM private_rooms WHERE code = $1`, [code]);
+  if (r.rowCount === 0) return res.status(404).json({ error: 'Salon introuvable.' });
+  if (r.rows[0].host_id !== req.user.id) return res.status(403).json({ error: 'Seul l\'hôte peut supprimer le salon.' });
+  await pool.query(`DELETE FROM private_rooms WHERE code = $1`, [code]);
+  res.json({ ok: true });
+});
+
 // GET /api/rooms/:code — état d'un salon
 router.get('/:code', authMiddleware, async (req, res) => {
   const code = req.params.code.toUpperCase();

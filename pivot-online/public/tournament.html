@@ -25,6 +25,7 @@
     <div class="row mt-2">
       <button class="btn btn-vert" id="btn-join">Rejoindre</button>
       <button class="btn btn-bleu" id="btn-start">Lancer le tournoi</button>
+      <button class="btn btn-rouge" id="btn-leave-tournament">Quitter le tournoi</button>
     </div>
     <p class="muted mt-2" id="t-code-info"></p>
   </div>
@@ -95,6 +96,31 @@ document.getElementById('btn-start').addEventListener('click', async () => {
     charger();
   } catch (e) { PIVOT.toast(e.message, 'error'); }
 });
+
+document.getElementById('btn-leave-tournament').addEventListener('click', async () => {
+  if (!confirm('Quitter le tournoi ? Si tu es le créateur, le tournoi sera supprimé.')) return;
+  try {
+    const r = await PIVOT.api('POST', `/tournaments/${id}/leave`, {});
+    PIVOT.toast(r.deleted ? 'Tournoi supprimé.' : 'Désinscription OK.');
+    setTimeout(() => window.location.href = '/tournaments', 800);
+  } catch (e) { PIVOT.toast(e.message, 'error'); }
+});
+
+// Écouter les mises à jour WebSocket pour le tournoi (en temps réel)
+(function watchTournament() {
+  const sock = PIVOT.connectSocket();
+  if (!sock) return;
+  sock.on('tournament.update', (data) => {
+    if (data.id !== id) return;
+    // Recharger la liste si quelqu'un a rejoint ou quitté
+    if (data.joined || data.left || data.started) charger();
+  });
+  sock.on('tournament.closed', (data) => {
+    if (data.id !== id) return;
+    PIVOT.toast(data.reason || 'Tournoi supprimé.', 'error');
+    setTimeout(() => window.location.href = '/tournaments', 1500);
+  });
+})();
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);

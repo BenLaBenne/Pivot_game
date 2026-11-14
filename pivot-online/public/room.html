@@ -26,6 +26,9 @@
     <p class="muted mb-2">Lien à partager : <a href="#" id="room-link"></a></p>
     <p class="muted mb-2" id="room-status">Statut : en attente d'un adversaire…</p>
     <p class="muted">Partie amicale — l'Elo n'est pas affecté, mais PC et TR sont distribués (réduits de moitié).</p>
+    <div class="row mt-2">
+      <button class="btn btn-rouge" id="btn-leave-room">🚪 Quitter le salon</button>
+    </div>
   </div>
 
   <div id="game" class="hidden">
@@ -118,7 +121,47 @@ document.getElementById('btn-quit')?.addEventListener('click', () => {
   if (sock) sock.emit('play.quit');
 });
 
+// Bouton "Quitter le salon" (avant le lancement du match)
+document.getElementById('btn-leave-room')?.addEventListener('click', async () => {
+  if (!confirm('Quitter le salon ? Si tu es l\'hôte, le salon sera supprimé.')) return;
+  try {
+    // Appel API REST pour assurer le nettoyage même si le socket est en panique
+    await PIVOT.api('POST', '/rooms/leave', { code });
+    PIVOT.toast('Salon quitté.');
+    setTimeout(() => window.location.href = '/', 700);
+  } catch (e) {
+    // En cas d'erreur, on essaie quand même de partir
+    const sock = PIVOT._socket;
+    if (sock) sock.emit('room.leave', { code });
+    PIVOT.toast('Salon quitté.');
+    setTimeout(() => window.location.href = '/', 700);
+  }
+});
+
+// Événements socket pour la gestion des salons
 PIVOT.initRoom(code);
+
+// Surcharge: gérer room.closed et room.update avec guestLeft
+const _sock = PIVOT._socket;
+if (_sock) {
+  _sock.on('room.closed', (data) => {
+    PIVOT.toast(data.message || 'Salon fermé.', 'error');
+    setTimeout(() => window.location.href = '/', 1500);
+  });
+  _sock.on('room.update', (data) => {
+    if (data.guestLeft) {
+      PIVOT.toast('L\'adversaire a quitté le salon.', 'error');
+      // Si on était en partie, revenir au lobby
+      const game = document.getElementById('game');
+      const lobby = document.getElementById('room-lobby');
+      if (game) game.classList.add('hidden');
+      if (lobby) lobby.classList.remove('hidden');
+    }
+  });
+  _sock.on('tournament.closed', (data) => {
+    PIVOT.toast(data.reason || 'Tournoi supprimé.', 'error');
+  });
+}
 </script>
 </body>
 </html>

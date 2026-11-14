@@ -102,6 +102,46 @@ router.post('/:id/join', authMiddleware, async (req, res) => {
   }
 });
 
+// POST /api/tournaments/:id/leave — se désinscrit d'un tournoi (avant lancement)
+// Si c'est le créateur → supprimer le tournoi. Si plus aucun inscrit → supprimer aussi.
+router.post('/:id/leave', authMiddleware, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: 'id invalide.' });
+  const r = await pool.query(`SELECT * FROM tournaments WHERE id = $1`, [id]);
+  if (r.rowCount === 0) return res.status(404).json({ error: 'Tournoi introuvable.' });
+  const t = r.rows[0];
+  if (t.status !== 'waiting') return res.status(400).json({ error: 'Tournoi déjà lancé : impossible de se désinscrire.' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`DELETE FROM tournament_players WHERE tournament_id = $1 AND user_id = $2`, [id, req.user.id]);
+    // Si c'est le créateur → supprimer tout
+    if (t.creator_id === req.user.id) {
+      await client.query(`DELETE FROM tournament_matches WHERE tournament_id = $1`, [id]);
+      await client.query(`DELETE FROM tournament_players WHERE tournament_id = $1`, [id]);
+      await client.query(`DELETE FROM tournaments WHERE id = $1`, [id]);
+      await client.query('COMMIT');
+      return res.json({ ok: true, deleted: true });
+    }
+    // Sinon, vérifier s'il reste des inscrits
+    const rest = await client.query('SELECT COUNT(*)::int AS n FROM tournament_players WHERE tournament_id = $1', [id]);
+    if (rest.rows[0].n === 0) {
+      await client.query(`DELETE FROM tournaments WHERE id = $1`, [id]);
+      await client.query('COMMIT');
+      return res.json({ ok: true, deleted: true });
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true, deleted: false });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('[tournaments] leave:', e);
+    res.status(500).json({ error: 'Erreur serveur.' });
+  } finally {
+    client.release();
+  }
+});
+
 // POST /api/tournaments/:id/start — lance le tournoi (créateur uniquement, min 3 inscrits)
 router.post('/:id/start', authMiddleware, async (req, res) => {
   const id = parseInt(req.params.id, 10);

@@ -697,7 +697,15 @@ async function finirMatch(io, matchId) {
     }
     pcGagnantFinal = pcGagnant + streakBonus;
 
-    // Transaction DB
+    // Le gagnant a-t-il franchi un nouveau palier ? Calculé AVANT la transaction
+    // pour pouvoir afficher les montees dans le recap.
+    const gagnantUser = gagnantId === m.p1Id ? eR.rows[0] : eB.rows[0];
+    const oldTr = gagnantUser.trophies;
+    const newTr = oldTr + trGagnant;
+
+    // Transaction DB — UNIQUEMENT des UPDATE/INSERT, JAMAIS d'appel à pool.query
+    // ici (sinon self-deadlock : la transaction attendrait verifierMontees qui
+    // attendrait le COMMIT de la transaction pour relâcher son lock sur users).
     await client.query('BEGIN');
     await client.query(
       `UPDATE users SET pc_balance = pc_balance + $1, trophies = GREATEST(0, trophies + $2),
@@ -720,13 +728,17 @@ async function finirMatch(io, matchId) {
       `UPDATE matches SET status = 'finished', winner_id = $1, elo_change = $2, pc_earned = $3, tr_earned = $4, finished_at = NOW() WHERE id = $5`,
       [gagnantId, deltaA, pcGagnantFinal, trGagnant, m.dbId]
     );
-
-    const gagnantUser = gagnantId === m.p1Id ? eR.rows[0] : eB.rows[0];
-    const oldTr = gagnantUser.trophies;
-    const newTr = oldTr + trGagnant;
-    montees = await verifierMontees(gagnantId, oldTr, newTr);
-
     await client.query('COMMIT');
+
+    // ===== APRÈS COMMIT : créditer les montées de rank (utilise pool, hors transaction) =====
+    // Si verifierMontees échoue, le match est déjà enregistré — on perd juste les
+    // récompenses de montée (mais pas le PC/TR/Elo du match lui-même).
+    try {
+      montees = await verifierMontees(gagnantId, oldTr, newTr);
+    } catch (eM) {
+      console.error('[socket] verifierMontees erreur (non bloquant):', eM.message);
+      montees = [];
+    }
 
     // Recharger les inventaires APRES les montées de rank (pour inclure les récompenses)
     try {

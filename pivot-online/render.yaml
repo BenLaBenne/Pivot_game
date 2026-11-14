@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: pivot-online
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    # Le serveur bind le port immédiatement, puis lance init-db en arrière-plan.
+    # Le health check renvoie toujours 200 (avec dbReady=false tant que la DB n'est pas prête).
+    # Render attend ce délai avant de considérer le service "live" — on met 60s pour
+    # laisser le temps à init-db de finir sur une DB externe (cold start + SSL).
+    healthCheckGracePeriod: 60
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pivot-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+
+databases:
+  - name: pivot-db
+    plan: free

@@ -1,6 +1,6 @@
 // init-db.js — Création automatique de toutes les tables au démarrage.
 // Peut être lancé seul: `npm run init-db` ou automatiquement par server.js.
-const { pool } = require('./db');
+const { pool, waitForConnection } = require('./db');
 
 const SCHEMA = `
 -- ===== Users =====
@@ -167,36 +167,31 @@ CREATE TABLE IF NOT EXISTS chest_openings (
 
 async function initDb() {
   console.log('[init-db] Création / vérification du schéma...');
+  // Attendre que la DB soit prête (retry auto si la DB est encore en cold start)
+  const connected = await waitForConnection(5, 2000);
+  if (!connected) {
+    throw new Error('Impossible de se connecter à la base de données après 5 essais.');
+  }
+  console.log('[init-db] Connexion DB OK. Création du schéma...');
   await pool.query(SCHEMA);
 
-  // Migrations: ajouter les colonnes is_admin / banned / banned_reason / banned_at / admin_level
-  // si la table users existe déjà sans elles (DB existante).
+  // Migrations: ajouter les colonnes manquantes sur une DB existante.
+  // On utilise ALTER TABLE ... ADD COLUMN IF NOT EXISTS (PostgreSQL 9.6+)
+  // qui est beaucoup plus rapide qu'un DO $$ block avec information_schema.
   await pool.query(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                     WHERE table_name='users' AND column_name='is_admin') THEN
-        ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT FALSE;
-      END IF;
-      IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                     WHERE table_name='users' AND column_name='banned') THEN
-        ALTER TABLE users ADD COLUMN banned BOOLEAN DEFAULT FALSE;
-      END IF;
-      IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                     WHERE table_name='users' AND column_name='banned_reason') THEN
-        ALTER TABLE users ADD COLUMN banned_reason TEXT;
-      END IF;
-      IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                     WHERE table_name='users' AND column_name='banned_at') THEN
-        ALTER TABLE users ADD COLUMN banned_at TIMESTAMP;
-      END IF;
-      IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                     WHERE table_name='users' AND column_name='admin_level') THEN
-        ALTER TABLE users ADD COLUMN admin_level INTEGER DEFAULT 0;
-      END IF;
-      -- Synchroniser is_admin avec admin_level (admin_level >= 1 ⇒ is_admin = TRUE)
-      UPDATE users SET is_admin = (admin_level >= 1);
-    END $$;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS banned BOOLEAN DEFAULT FALSE;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_reason TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_at TIMESTAMP;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_level INTEGER DEFAULT 0;
+    ALTER TABLE matches ADD COLUMN IF NOT EXISTS tournament_id INTEGER;
+    ALTER TABLE matches ADD COLUMN IF NOT EXISTS room_code VARCHAR(6);
+    ALTER TABLE matches ADD COLUMN IF NOT EXISTS finished_at TIMESTAMP;
+    ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS max_players INTEGER DEFAULT 20;
+    ALTER TABLE reports ADD COLUMN IF NOT EXISTS admin_note TEXT;
+    ALTER TABLE reports ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP;
+    -- Synchroniser is_admin avec admin_level (admin_level >= 1 ⇒ is_admin = TRUE)
+    UPDATE users SET is_admin = (admin_level >= 1) WHERE admin_level IS NOT NULL;
   `);
   console.log('[init-db] Schéma OK.');
 }
